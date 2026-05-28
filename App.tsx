@@ -1,33 +1,67 @@
 import React, {useEffect} from 'react';
-import {View, Text} from 'react-native';
 
-import {initializeDatabase} from './src/services/databaseService';
+import {
+View,
+ActivityIndicator,
+StyleSheet
+} from 'react-native';
+
+import AppNavigator from './src/navigation/AppNavigator';
+
+import {
+initializeDatabase
+}
+from './src/services/databaseService';
 
 function App(): JSX.Element {
 
-  useEffect(() => {
-    testDatabase();
-  }, []);
+useEffect(() => {
 
-  const testDatabase = async () => {
+setupApp();
 
-    const result = await initializeDatabase();
+},[]);
 
-    console.log(result);
-  };
+const setupApp = async()=>{
 
-  return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}>
+try{
 
-      <Text>SQLite Testing</Text>
+const result=
+await initializeDatabase();
 
-    </View>
-  );
+console.log(
+"Database initialized:",
+result
+);
+
+}catch(error){
+
+console.log(
+"Database Error:",
+error
+);
+
 }
+
+};
+
+return(
+
+<View style={styles.container}>
+
+<AppNavigator/>
+
+</View>
+
+);
+
+}
+
+const styles=StyleSheet.create({
+
+container:{
+flex:1
+}
+
+});
 
 export default App;
