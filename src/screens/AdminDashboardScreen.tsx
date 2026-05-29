@@ -17,7 +17,8 @@ import { getPendingSyncRecords } from '../services/databaseService';
 
 type AdminDashboardProps = NativeStackScreenProps<RootStackParamList, 'AdminDashboard'>;
 
-const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ navigation }) => {
+const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ navigation, route }) => {
+  const adminUser = route?.params?.adminUser || 'Administrator';
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
@@ -65,7 +66,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ navigation }) => 
         {/* Register New Employee */}
         <TouchableOpacity
           style={styles.actionCard}
-          onPress={() => navigation.navigate('Register')}>
+          onPress={() => navigation.navigate('Register', { adminUser })}>
           <View style={styles.actionIconContainer}>
             <Text style={styles.actionIcon}>👤</Text>
           </View>
@@ -73,6 +74,22 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ navigation }) => 
             <Text style={styles.actionTitle}>Register New Employee</Text>
             <Text style={styles.actionDesc}>
               Capture facial embeddings and enroll a new employee for offline attendance
+            </Text>
+          </View>
+          <Text style={styles.actionArrow}>›</Text>
+        </TouchableOpacity>
+
+        {/* Manage Employees */}
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => navigation.navigate('ManageEmployees', { adminUser })}>
+          <View style={[styles.actionIconContainer, { backgroundColor: 'rgba(220, 38, 38, 0.12)' }]}>
+            <Text style={styles.actionIcon}>👥</Text>
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>Manage Employees</Text>
+            <Text style={styles.actionDesc}>
+              View registered employees and remove those who have left
             </Text>
           </View>
           <Text style={styles.actionArrow}>›</Text>

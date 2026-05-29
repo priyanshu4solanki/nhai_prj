@@ -364,6 +364,47 @@ export const getEmployee = async (employeeId) => {
   }
 };
 
+export const getAllEmployees = async () => {
+  if (!db) return [];
+
+  try {
+    const [result] = await db.executeSql(
+      'SELECT * FROM employees ORDER BY name ASC'
+    );
+
+    const rows = extractRows(result);
+    return rows.map(emp => {
+      if (emp.face_vector) {
+        try {
+          emp.faceVector = JSON.parse(emp.face_vector);
+        } catch (e) {
+          console.log('Error parsing face vector JSON:', e);
+        }
+      }
+      return emp;
+    });
+  } catch (error) {
+    console.log('Error fetching all employees:', error);
+    return [];
+  }
+};
+
+export const deleteEmployee = async (employeeId) => {
+  if (!db) return { success: false, error: 'Database not initialized' };
+
+  try {
+    await db.executeSql(
+      'DELETE FROM employees WHERE id = ?',
+      [employeeId]
+    );
+
+    return { success: true, message: `Employee ${employeeId} deleted successfully` };
+  } catch (error) {
+    console.log('Error deleting employee:', error);
+    return { success: false, error };
+  }
+};
+
 // Session operations
 export const startSession = async (employeeId, department) => {
   if (!db) return { success: false, error: 'Database not initialized' };

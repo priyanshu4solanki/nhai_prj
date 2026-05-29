@@ -23,8 +23,8 @@ type LoginMode = 'employee' | 'admin';
 
 // Hardcoded admin credentials (in production, use secure storage)
 const ADMIN_CREDENTIALS = {
-  username: 'admin',
-  password: 'nhai@2026',
+  username: 'Priyanshu solanki',
+  password: 'Passnhai',
 };
 
 const DEPARTMENTS = [
@@ -76,10 +76,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     await new Promise(resolve => setTimeout(resolve, 400));
 
     if (
-      adminUsername.trim().toLowerCase() === ADMIN_CREDENTIALS.username &&
+      adminUsername.trim() === ADMIN_CREDENTIALS.username &&
       adminPassword === ADMIN_CREDENTIALS.password
     ) {
-      navigation.navigate('AdminDashboard');
+      navigation.navigate('AdminDashboard', { adminUser: adminUsername.trim() });
     } else {
       setError('Invalid admin credentials. Please try again.');
     }

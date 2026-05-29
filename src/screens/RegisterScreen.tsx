@@ -21,6 +21,9 @@ import { generateRandomFaceVector, validateEmployeeId } from '../utils';
 
 type RegisterScreenProps = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
+// Hardcoded admin username for verification
+const ADMIN_USERNAME = 'Priyanshu solanki';
+
 const DEPARTMENTS = [
   { label: 'Engineering', value: 'engineering' },
   { label: 'Administration', value: 'admin' },
@@ -29,7 +32,28 @@ const DEPARTMENTS = [
   { label: 'Operations', value: 'operations' },
 ];
 
-const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
+const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) => {
+  const adminUser = route?.params?.adminUser;
+  
+  // Verify admin access
+  if (!adminUser || adminUser !== ADMIN_USERNAME) {
+    return (
+      <SafeAreaView style={[styles.container, globalStyles.container]}>
+        <View style={styles.unauthorizedContainer}>
+          <Text style={styles.unauthorizedIcon}>🔒</Text>
+          <Text style={styles.unauthorizedTitle}>Access Denied</Text>
+          <Text style={styles.unauthorizedText}>
+            Only authorized administrators can register new employees.
+          </Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
   const [employeeId, setEmployeeId] = useState('');
   const [name, setName] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('');
@@ -570,6 +594,31 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: SIZES.lg,
     fontWeight: '600',
+  },
+  // Unauthorized Access
+  unauthorizedContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SIZES.lg,
+  },
+  unauthorizedIcon: {
+    fontSize: 64,
+    marginBottom: SIZES.lg,
+  },
+  unauthorizedTitle: {
+    fontSize: SIZES.xl,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: SIZES.md,
+    textAlign: 'center',
+  },
+  unauthorizedText: {
+    fontSize: SIZES.base,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SIZES.xl,
+    lineHeight: 22,
   },
 });
 

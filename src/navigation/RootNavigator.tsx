@@ -6,6 +6,7 @@ import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
 import AdminDashboardScreen from '../screens/AdminDashboardScreen';
 import RegisterScreen from '../screens/RegisterScreen';
+import ManageEmployeesScreen from '../screens/ManageEmployeesScreen';
 import FaceAuthScreen from '../screens/FaceAuthScreen';
 import LivenessScreen from '../screens/LivenessScreen';
 import RecognitionScreen from '../screens/RecognitionScreen';
@@ -40,6 +41,10 @@ export const RootNavigator = () => {
         <Stack.Screen
           name="Register"
           component={RegisterScreen}
+        />
+        <Stack.Screen
+          name="ManageEmployees"
+          component={ManageEmployeesScreen}
         />
         <Stack.Screen
           name="FaceAuth"

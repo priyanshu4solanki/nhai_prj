@@ -2,8 +2,9 @@
 export type RootStackParamList = {
   Splash: undefined;
   Login: undefined;
-  AdminDashboard: undefined;
-  Register: undefined;
+  AdminDashboard: { adminUser?: string };
+  Register: { adminUser?: string };
+  ManageEmployees: { adminUser?: string };
   FaceAuth: { employeeId: string; department: string };
   Liveness: { employeeId: string; department: string };
   Recognition: { employeeId: string; department: string; faceVector?: number[] };
