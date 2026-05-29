@@ -21,7 +21,7 @@ export const STRINGS = {
     employeeIdLabel: 'Employee ID',
     employeeIdPlaceholder: 'Enter your ID',
     departmentLabel: 'Department',
-    selectDepartment: 'Select Department',
+    selectDepartmentPlaceholder: 'Select Department',
     startButton: 'Start Attendance',
     invalidEmployeeId: 'Invalid Employee ID',
     selectDepartment: 'Please select a department',

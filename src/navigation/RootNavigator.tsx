@@ -4,6 +4,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
+import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+import RegisterScreen from '../screens/RegisterScreen';
 import FaceAuthScreen from '../screens/FaceAuthScreen';
 import LivenessScreen from '../screens/LivenessScreen';
 import RecognitionScreen from '../screens/RecognitionScreen';
@@ -20,59 +22,48 @@ export const RootNavigator = () => {
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
-          cardStyle: { backgroundColor: '#ffffff' },
+          contentStyle: { backgroundColor: '#ffffff' },
         }}>
         <Stack.Screen
           name="Splash"
           component={SplashScreen}
-          options={{ animationEnabled: false }}
+          options={{ animation: 'none' }}
         />
         <Stack.Screen
           name="Login"
           component={LoginScreen}
-          options={{
-            animationEnabled: true,
-            cardStyle: { backgroundColor: '#ffffff' },
-          }}
+        />
+        <Stack.Screen
+          name="AdminDashboard"
+          component={AdminDashboardScreen}
+        />
+        <Stack.Screen
+          name="Register"
+          component={RegisterScreen}
         />
         <Stack.Screen
           name="FaceAuth"
           component={FaceAuthScreen}
-          options={{
-            animationEnabled: true,
-            gestureEnabled: false,
-          }}
+          options={{ gestureEnabled: false }}
         />
         <Stack.Screen
           name="Liveness"
           component={LivenessScreen}
-          options={{
-            animationEnabled: true,
-            gestureEnabled: false,
-          }}
+          options={{ gestureEnabled: false }}
         />
         <Stack.Screen
           name="Recognition"
           component={RecognitionScreen}
-          options={{
-            animationEnabled: true,
-            gestureEnabled: false,
-          }}
+          options={{ gestureEnabled: false }}
         />
         <Stack.Screen
           name="Result"
           component={ResultScreen}
-          options={{
-            animationEnabled: true,
-            gestureEnabled: false,
-          }}
+          options={{ gestureEnabled: false }}
         />
         <Stack.Screen
           name="Sync"
           component={SyncScreen}
-          options={{
-            animationEnabled: true,
-          }}
         />
       </Stack.Navigator>
     </NavigationContainer>

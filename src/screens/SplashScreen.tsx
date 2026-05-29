@@ -32,6 +32,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ navigation }) => {
   const [progress, setProgress] = useState(0);
 
   useEffect(() => {
+    animateEntrance();
     initializationSequence();
   }, []);
 
@@ -87,9 +88,6 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ navigation }) => {
       await new Promise(resolve => setTimeout(resolve, 500));
       setProgress(100);
 
-      // Animate entrance before navigation
-      animateEntrance();
-
       // Navigate to Login after a brief delay
       setTimeout(() => {
         navigation.reset({
@@ -125,7 +123,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ navigation }) => {
         </View>
 
         <Text style={styles.appTitle}>{STRINGS.appName}</Text>
-        <Text style={styles.appSubtitle}>{STRINGS.splash.loadingModel}</Text>
+        <Text style={styles.appSubtitle}>{STRINGS.appSubtitle}</Text>
       </Animated.View>
 
       {/* Status and Progress */}

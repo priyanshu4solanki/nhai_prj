@@ -4,6 +4,22 @@ SQLite.enablePromise(true);
 
 let db = null;
 
+// Helper to extract rows safely across all React Native SQLite platforms
+const extractRows = (result) => {
+  if (!result || !result.rows) return [];
+  if (typeof result.rows.raw === 'function') {
+    return result.rows.raw();
+  }
+  if (result.rows._array) {
+    return result.rows._array;
+  }
+  const rows = [];
+  for (let i = 0; i < result.rows.length; i++) {
+    rows.push(result.rows.item(i));
+  }
+  return rows;
+};
+
 // Database initialization
 export const initializeDatabase = async () => {
   try {
@@ -60,7 +76,7 @@ const createTables = async () => {
         name TEXT,
         department TEXT,
         photo_path TEXT,
-        face_vector BLOB,
+        face_vector TEXT,
         created_at INTEGER,
         updated_at INTEGER
       );
@@ -100,8 +116,74 @@ const createTables = async () => {
     await db.executeSql('CREATE INDEX IF NOT EXISTS idx_session_employee ON sessions(employee_id);');
 
     console.log('All tables created successfully');
+
+    // Seed default employees if none exist
+    await seedDefaultEmployees();
   } catch (error) {
     console.log('Error creating tables:', error);
+  }
+};
+
+// Seed default employees for immediate offline testing
+const seedDefaultEmployees = async () => {
+  try {
+    const [result] = await db.executeSql('SELECT COUNT(*) as count FROM employees');
+    const rows = extractRows(result);
+    const count = rows[0]?.count || 0;
+
+    if (count === 0) {
+      console.log('Seeding default employees...');
+
+      // Helper to generate deterministic face vectors
+      const generateMockVector = (seedValue) => {
+        const vec = [];
+        for (let i = 0; i < 128; i++) {
+          vec.push(Math.sin(seedValue + i) * 0.1);
+        }
+        // Normalize
+        let mag = Math.sqrt(vec.reduce((sum, val) => sum + val * val, 0));
+        return vec.map(val => (mag > 0 ? val / mag : val));
+      };
+
+      const seedData = [
+        {
+          id: 'NHAI-101',
+          name: 'Amit Sharma',
+          department: 'engineering',
+          vector: generateMockVector(1.0),
+        },
+        {
+          id: 'NHAI-102',
+          name: 'Sanjay Verma',
+          department: 'operations',
+          vector: generateMockVector(2.0),
+        },
+        {
+          id: 'NHAI-103',
+          name: 'Priya Patel',
+          department: 'admin',
+          vector: generateMockVector(3.0),
+        },
+      ];
+
+      for (const emp of seedData) {
+        await db.executeSql(
+          `INSERT INTO employees (id, name, department, face_vector, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            emp.id,
+            emp.name,
+            emp.department,
+            JSON.stringify(emp.vector),
+            Date.now(),
+            Date.now(),
+          ]
+        );
+      }
+      console.log('Successfully seeded default employees.');
+    }
+  } catch (error) {
+    console.error('Error seeding default employees:', error);
   }
 };
 
@@ -144,6 +226,12 @@ export const insertAttendanceRecord = async (record) => {
       ]
     );
 
+    // Also add to sync queue table
+    await addToSyncQueue({
+      uuid,
+      employee_id: employeeId,
+    });
+
     return { success: true, message: 'Attendance recorded' };
   } catch (error) {
     console.log('Error inserting attendance:', error);
@@ -160,7 +248,7 @@ export const getAttendanceRecords = async (employeeId, limit = 100) => {
       [employeeId, limit]
     );
 
-    return result.rows._array || [];
+    return extractRows(result);
   } catch (error) {
     console.log('Error fetching attendance records:', error);
     return [];
@@ -175,7 +263,7 @@ export const getPendingSyncRecords = async () => {
       'SELECT * FROM attendance WHERE synced = 0 ORDER BY created_at ASC'
     );
 
-    return result.rows._array || [];
+    return extractRows(result);
   } catch (error) {
     console.log('Error fetching pending records:', error);
     return [];
@@ -191,6 +279,12 @@ export const markRecordAsSynced = async (recordUuid) => {
       [Date.now(), recordUuid]
     );
 
+    // Remove from sync queue
+    await db.executeSql(
+      "DELETE FROM sync_queue WHERE attendance_id = ?",
+      [recordUuid]
+    );
+
     return { success: true };
   } catch (error) {
     console.log('Error marking record as synced:', error);
@@ -203,6 +297,7 @@ export const deleteAttendanceRecord = async (recordUuid) => {
 
   try {
     await db.executeSql('DELETE FROM attendance WHERE uuid = ?', [recordUuid]);
+    await db.executeSql('DELETE FROM sync_queue WHERE attendance_id = ?', [recordUuid]);
     return { success: true };
   } catch (error) {
     console.log('Error deleting attendance record:', error);
@@ -226,7 +321,7 @@ export const insertOrUpdateEmployee = async (employee) => {
         name,
         department,
         photoPath || null,
-        faceVector ? Buffer.from(faceVector).toString('base64') : null,
+        faceVector ? JSON.stringify(faceVector) : null,
         Date.now(),
         Date.now(),
       ]
@@ -248,13 +343,16 @@ export const getEmployee = async (employeeId) => {
       [employeeId]
     );
 
-    if (result.rows.length > 0) {
-      const employee = result.rows._array[0];
+    const rows = extractRows(result);
+    if (rows.length > 0) {
+      const employee = rows[0];
       // Decode face vector if present
       if (employee.face_vector) {
-        employee.faceVector = Array.from(
-          new Float32Array(Buffer.from(employee.face_vector, 'base64').buffer)
-        );
+        try {
+          employee.faceVector = JSON.parse(employee.face_vector);
+        } catch (e) {
+          console.log('Error parsing face vector JSON:', e);
+        }
       }
       return employee;
     }
@@ -271,6 +369,9 @@ export const startSession = async (employeeId, department) => {
   if (!db) return { success: false, error: 'Database not initialized' };
 
   try {
+    // End active session first
+    await endSession(employeeId);
+
     await db.executeSql(
       `INSERT INTO sessions (
         employee_id, department, start_time, is_active, created_at
@@ -310,7 +411,8 @@ export const getActiveSession = async (employeeId) => {
       [employeeId]
     );
 
-    return result.rows.length > 0 ? result.rows._array[0] : null;
+    const rows = extractRows(result);
+    return rows.length > 0 ? rows[0] : null;
   } catch (error) {
     console.log('Error fetching active session:', error);
     return null;
@@ -323,10 +425,16 @@ export const addToSyncQueue = async (attendanceRecord) => {
 
   try {
     await db.executeSql(
-      `INSERT INTO sync_queue (
+      `INSERT OR REPLACE INTO sync_queue (
         attendance_id, employee_id, timestamp, status, created_at
       ) VALUES (?, ?, ?, ?, ?)`,
-      [attendanceRecord.uuid, attendanceRecord.employee_id, Date.now(), 'pending', Date.now()]
+      [
+        attendanceRecord.uuid,
+        attendanceRecord.employee_id,
+        Date.now(),
+        'pending',
+        Date.now(),
+      ]
     );
 
     return { success: true };
@@ -344,7 +452,8 @@ export const getSyncQueueSize = async () => {
       "SELECT COUNT(*) as count FROM sync_queue WHERE status = 'pending'"
     );
 
-    return result.rows._array[0]?.count || 0;
+    const rows = extractRows(result);
+    return rows[0]?.count || 0;
   } catch (error) {
     console.log('Error getting sync queue size:', error);
     return 0;

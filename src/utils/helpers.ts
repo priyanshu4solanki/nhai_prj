@@ -50,3 +50,13 @@ export const detectBlink = (
   // Blink detected if EAR drops significantly
   return previousEAR > threshold && currentEAR <= threshold;
 };
+
+export const generateRandomFaceVector = (): number[] => {
+  const vec: number[] = [];
+  for (let i = 0; i < 128; i++) {
+    vec.push(Math.random() * 2 - 1);
+  }
+  // Normalize vector
+  const mag = Math.sqrt(vec.reduce((sum, val) => sum + val * val, 0));
+  return vec.map(val => (mag > 0 ? val / mag : val));
+};
