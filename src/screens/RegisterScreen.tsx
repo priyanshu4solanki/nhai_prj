@@ -74,7 +74,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
     }
 
     if (!validateEmployeeId(employeeId)) {
-      setError('Invalid Employee ID format (3-20 Alphanumeric characters)');
+      setError('Invalid Employee ID format (3-20 characters, letters/numbers and hyphen allowed)');
       return;
     }
 

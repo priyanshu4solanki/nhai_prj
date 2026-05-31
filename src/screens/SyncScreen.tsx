@@ -66,6 +66,30 @@ const SyncScreen: React.FC<SyncScreenProps> = ({ navigation }) => {
     };
   }, [pendingRecords.length, isSyncing]);
 
+  const uploadAttendanceRecord = async (record: any): Promise<boolean> => {
+    const SYNC_ENDPOINT = ''; // Optional: replace with your real server endpoint
+
+    if (SYNC_ENDPOINT) {
+      try {
+        const response = await fetch(SYNC_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(record),
+        });
+
+        return response.ok;
+      } catch (error) {
+        console.error('Remote sync failed:', error);
+        return false;
+      }
+    }
+
+    // No remote endpoint configured: simulate upload success locally.
+    return true;
+  };
+
   const executeSync = async (isAuto = false) => {
     const online = await checkInternetConnectivity();
     if (!online) {
@@ -86,8 +110,10 @@ const SyncScreen: React.FC<SyncScreenProps> = ({ navigation }) => {
 
     for (const record of pendingRecords) {
       try {
-        // Simulate secure REST API upload latency (e.g. AWS API Gateway / Datalake 3.0 mock upload)
-        await new Promise(resolve => setTimeout(resolve, 800));
+        const synced = await uploadAttendanceRecord(record);
+        if (!synced) {
+          throw new Error('Upload failed');
+        }
 
         // Mark as synced in SQLite and remove from sync queue
         await markRecordAsSynced(record.uuid);
@@ -97,7 +123,7 @@ const SyncScreen: React.FC<SyncScreenProps> = ({ navigation }) => {
         setSyncProgress(Math.round((completed / total) * 100));
         setSyncedCount(prev => prev + 1);
       } catch (err) {
-        console.error('Record upload failed for UUID:', record.uuid);
+        console.error('Record upload failed for UUID:', record.uuid, err);
       }
     }
 

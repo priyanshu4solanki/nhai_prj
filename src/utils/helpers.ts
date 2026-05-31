@@ -26,8 +26,8 @@ export const delay = (ms: number): Promise<void> => {
 };
 
 export const validateEmployeeId = (id: string): boolean => {
-  // Employee ID format: Should be alphanumeric, 3-20 characters
-  const regex = /^[a-zA-Z0-9]{3,20}$/;
+  // Employee ID format: Alphanumeric or hyphen, 3-20 characters (e.g., NHAI-101)
+  const regex = /^[A-Za-z0-9-]{3,20}$/;
   return regex.test(id);
 };
 

@@ -97,7 +97,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     }
 
     if (!validateEmployeeId(employeeId)) {
-      setError('Invalid Employee ID format');
+      setError('Invalid Employee ID format (3-20 characters, letters/numbers and hyphen allowed)');
       return;
     }
 
