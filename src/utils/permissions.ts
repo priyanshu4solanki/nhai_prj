@@ -74,3 +74,44 @@ export const requestStoragePermission = async (): Promise<CameraPermissionStatus
     return { granted: false };
   }
 };
+
+export const requestLocationPermission = async (): Promise<{ granted: boolean; reason?: string }> => {
+  try {
+    if (Platform.OS === 'android') {
+      // Request fine location first
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: 'Location Permission',
+          message: 'This app needs access to your location to verify geofence attendance.',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'OK',
+        }
+      );
+
+      const granted = result === PermissionsAndroid.RESULTS.GRANTED;
+      return { granted, reason: granted ? undefined : 'Permission denied' };
+    }
+
+    // iOS: Info.plist must be configured; assume granted for now
+    return { granted: true };
+  } catch (error) {
+    console.error('Error requesting location permission:', error);
+    return { granted: false, reason: 'Error requesting permission' };
+  }
+};
+
+export const checkLocationPermission = async (): Promise<boolean> => {
+  try {
+    if (Platform.OS === 'android') {
+      const permission = PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION;
+      const result = await PermissionsAndroid.check(permission);
+      return result;
+    }
+    return true;
+  } catch (error) {
+    console.error('Error checking location permission:', error);
+    return false;
+  }
+};

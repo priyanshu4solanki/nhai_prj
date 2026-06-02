@@ -20,6 +20,67 @@ const extractRows = (result) => {
   return rows;
 };
 
+const getTableColumns = async (tableName) => {
+  if (!db) return [];
+  try {
+    const [result] = await db.executeSql(`PRAGMA table_info('${tableName}');`);
+    const rows = extractRows(result);
+    return rows.map(row => row.name || row.NAME || (typeof row.name === 'string' ? row.name : ''));
+  } catch (error) {
+    console.log(`Error getting table columns for ${tableName}:`, error);
+    return [];
+  }
+};
+
+const addColumnIfMissing = async (tableName, columnName, columnDefinition) => {
+  const existingColumns = await getTableColumns(tableName);
+  console.log(`Columns in ${tableName} before migration:`, existingColumns);
+  if (!existingColumns.includes(columnName)) {
+    console.log(`Adding missing column ${columnName} to ${tableName}`);
+    await db.executeSql(`ALTER TABLE ${tableName} ADD COLUMN ${columnDefinition}`);
+    const updatedColumns = await getTableColumns(tableName);
+    console.log(`Columns in ${tableName} after migration:`, updatedColumns);
+    if (!updatedColumns.includes(columnName)) {
+      throw new Error(`Failed to add column ${columnName} to ${tableName}`);
+    }
+  }
+};
+
+const tableExists = async (tableName) => {
+  if (!db) return false;
+  try {
+    const [result] = await db.executeSql(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name = ?;",
+      [tableName]
+    );
+    return extractRows(result).length > 0;
+  } catch (error) {
+    console.log(`Error checking if table exists ${tableName}:`, error);
+    return false;
+  }
+};
+
+const ensureTableSchema = async (tableName, createSql, requiredColumns) => {
+  const exists = await tableExists(tableName);
+  if (!exists) {
+    await db.executeSql(createSql);
+    return;
+  }
+
+  const existingColumns = await getTableColumns(tableName);
+  const missingColumns = requiredColumns.filter(column => !existingColumns.includes(column.name));
+
+  if (missingColumns.length === 0) {
+    return;
+  }
+
+  console.log(`Migrating ${tableName} - missing columns:`, missingColumns.map(c => c.name));
+
+  for (const column of missingColumns) {
+    await addColumnIfMissing(tableName, column.name, `${column.name} ${column.definition}`);
+  }
+};
+
 // Database initialization
 export const initializeDatabase = async () => {
   try {
@@ -50,8 +111,9 @@ const createTables = async () => {
 
   try {
     // Attendance records table
-    await db.executeSql(`
-      CREATE TABLE IF NOT EXISTS attendance (
+    await ensureTableSchema(
+      'attendance',
+      `CREATE TABLE IF NOT EXISTS attendance (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         uuid TEXT UNIQUE,
         employee_id TEXT NOT NULL,
@@ -66,12 +128,17 @@ const createTables = async () => {
         recognition_confidence REAL,
         created_at INTEGER,
         synced_at INTEGER
-      );
-    `);
+      );`,
+      [
+        { name: 'synced', definition: 'INTEGER DEFAULT 0' },
+        { name: 'synced_at', definition: 'INTEGER' },
+      ]
+    );
 
     // Employee records table
-    await db.executeSql(`
-      CREATE TABLE IF NOT EXISTS employees (
+    await ensureTableSchema(
+      'employees',
+      `CREATE TABLE IF NOT EXISTS employees (
         id TEXT PRIMARY KEY,
         name TEXT,
         department TEXT,
@@ -79,8 +146,14 @@ const createTables = async () => {
         face_vector TEXT,
         created_at INTEGER,
         updated_at INTEGER
-      );
-    `);
+      );`,
+      [
+        { name: 'photo_path', definition: 'TEXT' },
+        { name: 'face_vector', definition: 'TEXT' },
+        { name: 'created_at', definition: 'INTEGER' },
+        { name: 'updated_at', definition: 'INTEGER' },
+      ]
+    );
 
     // Session management table
     await db.executeSql(`
@@ -112,7 +185,10 @@ const createTables = async () => {
     // Indexes for better query performance
     await db.executeSql('CREATE INDEX IF NOT EXISTS idx_employee_id ON attendance(employee_id);');
     await db.executeSql('CREATE INDEX IF NOT EXISTS idx_timestamp ON attendance(timestamp);');
-    await db.executeSql('CREATE INDEX IF NOT EXISTS idx_synced ON attendance(synced);');
+    const attendanceColumnsAfter = await getTableColumns('attendance');
+    if (attendanceColumnsAfter.includes('synced')) {
+      await db.executeSql('CREATE INDEX IF NOT EXISTS idx_synced ON attendance(synced);');
+    }
     await db.executeSql('CREATE INDEX IF NOT EXISTS idx_session_employee ON sessions(employee_id);');
 
     console.log('All tables created successfully');

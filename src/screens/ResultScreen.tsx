@@ -13,8 +13,17 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { COLORS, SIZES, STRINGS } from '../constants';
 import { globalStyles } from '../theme';
-import { getEmployee, insertAttendanceRecord } from '../services/databaseService';
+import { getEmployee } from '../services/databaseService';
+import { attemptGeoAttendance } from '../utils/geofence';
 import { generateUUID, getCurrentTimestamp, formatTimestamp } from '../utils';
+
+const formatDuration = (ms: number) => {
+  const totalSec = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  return `${hours}h ${minutes}m ${seconds}s`;
+};
 
 type ResultScreenProps = NativeStackScreenProps<RootStackParamList, 'Result'>;
 
@@ -25,6 +34,7 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
   const [employeeName, setEmployeeName] = useState('Employee');
   const [timestamp, setTimestamp] = useState<number>(getCurrentTimestamp());
   const [isSaved, setIsSaved] = useState(false);
+  const [presentDurationMs, setPresentDurationMs] = useState<number | null>(null);
 
   useEffect(() => {
     if (isSuccess) {
@@ -42,24 +52,20 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
       if (employee) {
         setEmployeeName(employee.name);
       }
+      // Attempt geofenced attendance (requests location permission internally)
+      const geoResult = await attemptGeoAttendance(employeeId, employee?.department);
 
-      // Prepare attendance model
-      const attendanceLog = {
-        uuid: generateUUID(),
-        employeeId,
-        department: employee?.department || 'Operations',
-        timestamp: currentTS,
-        checkType: 'check-in',
-        location: 'NHAI HQ Site (Lat: 28.5702, Lon: 77.2241)', // Simulated highway site
-        faceConfidence: 0.98,
-        livenessConfidence: 1.0,
-        recognitionConfidence: 0.97,
-      };
-
-      // Store in offline SQLite database
-      const result = await insertAttendanceRecord(attendanceLog);
-      if (result.success) {
+      if (geoResult.success) {
         setIsSaved(true);
+        if (geoResult.action === 'check-out' && geoResult.durationMs) {
+          setPresentDurationMs(geoResult.durationMs);
+        }
+      } else {
+        setIsSaved(false);
+        // If outside geofence, preserve a helpful message in the UI
+        if (geoResult.reason === 'outside_geofence') {
+          // leave isSaved false and option for manual override remains
+        }
       }
     } catch (error) {
       console.error('Failed to log attendance offline:', error);
@@ -120,6 +126,15 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
                   NHAI Site HQ (Lat: 28.57, Lon: 77.22)
                 </Text>
               </View>
+
+              {presentDurationMs !== null && (
+                <View style={styles.slipRow}>
+                  <Text style={styles.slipLabel}>Total Present Time</Text>
+                  <Text style={styles.slipValue}>
+                    {formatDuration(presentDurationMs)}
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.slipRow}>
                 <Text style={styles.slipLabel}>Liveness Status</Text>
