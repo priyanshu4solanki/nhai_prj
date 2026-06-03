@@ -1,38 +1,38 @@
 export const COLORS = {
   // Primary NHAI colors
-  primary: '#1a5490',     // NHAI Blue
-  secondary: '#ff9800',   // Orange accent
-  success: '#4caf50',     // Green for success
-  error: '#f44336',       // Red for error/failure
-  warning: '#ff9800',     // Orange for warning
+  primary: '#0f172a',     // Sleek Slate-900
+  secondary: '#f97316',   // Vibrant Orange
+  success: '#10b981',     // Emerald Green
+  error: '#ef4444',       // Crimson Red
+  warning: '#f59e0b',     // Amber Warning
   
-  // Neutral colors
+  // Neutral Slate colors
   white: '#ffffff',
   black: '#000000',
-  gray100: '#f5f5f5',
-  gray200: '#eeeeee',
-  gray300: '#e0e0e0',
-  gray400: '#bdbdbd',
-  gray500: '#9e9e9e',
-  gray600: '#757575',
-  gray700: '#616161',
-  gray800: '#424242',
-  gray900: '#212121',
+  gray100: '#f1f5f9',     // Slate-100
+  gray200: '#e2e8f0',     // Slate-200
+  gray300: '#cbd5e1',     // Slate-300
+  gray400: '#94a3b8',     // Slate-400
+  gray500: '#64748b',     // Slate-500
+  gray600: '#475569',     // Slate-600
+  gray700: '#334155',     // Slate-700
+  gray800: '#1e293b',     // Slate-800
+  gray900: '#0f172a',     // Slate-900
   
   // Semantic colors
-  background: '#ffffff',
-  surface: '#f5f5f5',
-  text: '#212121',
-  textSecondary: '#757575',
-  textTertiary: '#9e9e9e',
-  border: '#e0e0e0',
-  disabled: '#bdbdbd',
+  background: '#f8fafc',  // Slate-50 Light Background
+  surface: '#ffffff',     // Pure White Cards
+  text: '#0f172a',        // Slate-900 Text
+  textSecondary: '#475569', // Slate-600 Text
+  textTertiary: '#94a3b8', // Slate-400 Text
+  border: '#e2e8f0',      // Slate-200 Border
+  disabled: '#cbd5e1',    // Slate-300 Disabled
   
   // Face detection states
-  detected: '#4caf50',
-  notDetected: '#ff9800',
-  aliveConfirmed: '#4caf50',
-  spoofDetected: '#f44336',
+  detected: '#10b981',
+  notDetected: '#f59e0b',
+  aliveConfirmed: '#10b981',
+  spoofDetected: '#ef4444',
   
   // Transparency
   transparent: 'transparent',
