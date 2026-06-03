@@ -6,6 +6,7 @@ import {
   Animated,
   ActivityIndicator,
   SafeAreaView,
+  Image,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -117,20 +118,21 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ navigation }) => {
             transform: [{ scale: scaleAnim }],
           },
         ]}>
-        {/* Logo Placeholder - Replace with actual NHAI logo */}
-        <View style={styles.logoBox}>
-          <Text style={styles.logoText}>NHAI</Text>
-        </View>
+        <Image
+          source={require('../assets/logo.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
 
-        <Text style={styles.appTitle}>{STRINGS.appName}</Text>
-        <Text style={styles.appSubtitle}>{STRINGS.appSubtitle}</Text>
+        <Text style={styles.appTitle}>NHAI Attendance</Text>
+        <Text style={styles.appSubtitle}>Offline Face Authentication</Text>
       </Animated.View>
 
       {/* Status and Progress */}
       <View style={styles.statusContainer}>
         {/* Loading Indicator */}
         <View style={styles.indicatorContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={COLORS.white} />
         </View>
 
         {/* Status Text */}
@@ -177,39 +179,32 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.white,
+    backgroundColor: COLORS.primary,
     justifyContent: 'space-between',
     paddingVertical: SIZES['3xl'],
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: SIZES['5xl'],
+    marginTop: SIZES['5xl'] * 1.5,
   },
-  logoBox: {
-    width: 100,
-    height: 100,
-    borderRadius: SIZES['3xl'],
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+  logoImage: {
+    width: 140,
+    height: 140,
     marginBottom: SIZES.lg,
   },
-  logoText: {
-    fontSize: SIZES['4xl'],
-    fontWeight: '700',
-    color: COLORS.white,
-  },
   appTitle: {
-    fontSize: SIZES['3xl'],
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: SIZES.sm,
+    fontSize: SIZES['3xl'] + 2,
+    fontWeight: '800',
+    color: COLORS.white,
+    marginBottom: SIZES.xs,
     textAlign: 'center',
+    letterSpacing: 0.5,
   },
   appSubtitle: {
-    fontSize: SIZES.base,
-    color: COLORS.textSecondary,
+    fontSize: SIZES.base + 1,
+    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
+    fontWeight: '500',
   },
   statusContainer: {
     alignItems: 'center',
@@ -220,26 +215,26 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: SIZES.base,
-    color: COLORS.text,
+    color: 'rgba(255, 255, 255, 0.8)',
     marginBottom: SIZES.md,
     fontWeight: '500',
   },
   progressBarContainer: {
     width: '100%',
     height: 6,
-    backgroundColor: COLORS.gray200,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: SIZES.full,
     overflow: 'hidden',
     marginBottom: SIZES.md,
   },
   progressBar: {
     height: '100%',
-    backgroundColor: COLORS.primary,
+    backgroundColor: COLORS.white,
     borderRadius: SIZES.full,
   },
   progressText: {
     fontSize: SIZES.sm,
-    color: COLORS.textSecondary,
+    color: 'rgba(255, 255, 255, 0.6)',
   },
   connectivityContainer: {
     flexDirection: 'row',
@@ -259,7 +254,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: SIZES.xs,
-    color: COLORS.textTertiary,
+    color: 'rgba(255, 255, 255, 0.5)',
     textAlign: 'center',
     paddingBottom: SIZES.lg,
   },

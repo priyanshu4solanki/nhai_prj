@@ -116,11 +116,12 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
         setSuccess(true);
         setShowCamera(false);
       } else {
-        setError('Database error: Failed to save employee records.');
+        const errorMsg = typeof result.error === 'string' ? result.error : (result.error as any)?.message || JSON.stringify(result.error) || 'Unknown Database Error';
+        setError(`Database error: Failed to save employee records. (${errorMsg})`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Registration error:', err);
-      setError('Failed to complete registration.');
+      setError(`Failed to complete registration: ${err?.message || err}`);
     } finally {
       setIsLoading(false);
     }

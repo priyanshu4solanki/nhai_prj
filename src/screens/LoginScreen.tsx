@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
+import {useFocusEffect} from '@react-navigation/native';
 import {
   View,
   Text,
@@ -8,14 +9,15 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 
-import { RootStackParamList } from '../types';
-import { COLORS, SIZES, STRINGS } from '../constants';
-import { globalStyles } from '../theme';
-import { validateEmployeeId } from '../utils';
-import { startSession, getEmployee } from '../services/databaseService';
+import {RootStackParamList} from '../types';
+import {COLORS, SIZES, STRINGS} from '../constants';
+import {globalStyles} from '../theme';
+import {validateEmployeeId} from '../utils';
+import {startSession, getEmployee} from '../services/databaseService';
 
 type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -28,14 +30,14 @@ const ADMIN_CREDENTIALS = {
 };
 
 const DEPARTMENTS = [
-  { label: 'Engineering', value: 'engineering' },
-  { label: 'Administration', value: 'admin' },
-  { label: 'Finance', value: 'finance' },
-  { label: 'HR', value: 'hr' },
-  { label: 'Operations', value: 'operations' },
+  {label: 'Engineering', value: 'engineering'},
+  {label: 'Administration', value: 'admin'},
+  {label: 'Finance', value: 'finance'},
+  {label: 'HR', value: 'hr'},
+  {label: 'Operations', value: 'operations'},
 ];
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const [loginMode, setLoginMode] = useState<LoginMode>('employee');
 
   // Employee state
@@ -50,6 +52,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   // Shared state
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useFocusEffect(
+    React.useCallback(() => {
+      setEmployeeId('');
+      setSelectedDepartment('');
+      setShowDepartmentPicker(false);
+      setAdminUsername('');
+      setAdminPassword('');
+      setError('');
+    }, []),
+  );
 
   const switchMode = (mode: LoginMode) => {
     setLoginMode(mode);
@@ -79,7 +92,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       adminUsername.trim() === ADMIN_CREDENTIALS.username &&
       adminPassword === ADMIN_CREDENTIALS.password
     ) {
-      navigation.navigate('AdminDashboard', { adminUser: adminUsername.trim() });
+      navigation.navigate('AdminDashboard', {adminUser: adminUsername.trim()});
     } else {
       setError('Invalid admin credentials. Please try again.');
     }
@@ -97,7 +110,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     }
 
     if (!validateEmployeeId(employeeId)) {
-      setError('Invalid Employee ID format (3-20 characters, letters/numbers and hyphen allowed)');
+      setError(
+        'Invalid Employee ID format (3-20 characters, letters/numbers and hyphen allowed)',
+      );
       return;
     }
 
@@ -112,7 +127,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       const employee = await getEmployee(employeeId);
       if (!employee) {
         setError(
-          `Employee ID "${employeeId}" is not registered. Contact your administrator to register.`
+          `Employee ID "${employeeId}" is not registered. Contact your administrator to register.`,
         );
         setIsLoading(false);
         return;
@@ -139,11 +154,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.headerContainer}>
-          <View style={styles.logoBox}>
-            <Text style={styles.logoText}>NHAI</Text>
-          </View>
+          <Image
+            source={require('../assets/logo.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <Text style={styles.headerTitle}>{STRINGS.appSubtitle}</Text>
-          <Text style={styles.headerSubtitle}>Datalake 3.0 • Offline Authentication</Text>
+          <Text style={styles.headerSubtitle}>
+            Datalake 3.0 • Offline Authentication
+          </Text>
         </View>
 
         {/* Tab Switcher */}
@@ -178,11 +197,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
             <>
               {/* ─── Employee Form ─── */}
               <View style={styles.fieldContainer}>
-                <Text style={styles.label}>{STRINGS.login.employeeIdLabel}</Text>
+                <Text style={styles.label}>
+                  {STRINGS.login.employeeIdLabel}
+                </Text>
                 <TextInput
                   style={[
                     styles.input,
-                    (error && employeeId === '') ? styles.inputError : null,
+                    error && employeeId === '' ? styles.inputError : null,
                   ]}
                   placeholder={STRINGS.login.employeeIdPlaceholder}
                   value={employeeId}
@@ -196,21 +217,24 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               </View>
 
               <View style={styles.fieldContainer}>
-                <Text style={styles.label}>{STRINGS.login.departmentLabel}</Text>
+                <Text style={styles.label}>
+                  {STRINGS.login.departmentLabel}
+                </Text>
                 <TouchableOpacity
                   style={[
                     styles.departmentButton,
-                    (error && !selectedDepartment) ? styles.inputError : null,
+                    error && !selectedDepartment ? styles.inputError : null,
                   ]}
                   onPress={() => setShowDepartmentPicker(!showDepartmentPicker)}
                   disabled={isLoading}>
                   <Text
                     style={[
                       styles.departmentButtonText,
-                      !selectedDepartment && { color: COLORS.textTertiary },
+                      !selectedDepartment && {color: COLORS.textTertiary},
                     ]}>
                     {selectedDepartment
-                      ? DEPARTMENTS.find(d => d.value === selectedDepartment)?.label
+                      ? DEPARTMENTS.find(d => d.value === selectedDepartment)
+                          ?.label
                       : STRINGS.login.selectDepartmentPlaceholder}
                   </Text>
                 </TouchableOpacity>
@@ -281,7 +305,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
               <View style={styles.adminHintBox}>
                 <Text style={styles.adminHintText}>
-                  Admin access is required to register new employees and manage facial embeddings.
+                  Admin access is required to register new employees and manage
+                  facial embeddings.
                 </Text>
               </View>
             </>
@@ -301,13 +326,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               loginMode === 'admin' && styles.adminLoginButton,
               isLoading && styles.loginButtonDisabled,
             ]}
-            onPress={loginMode === 'employee' ? handleEmployeeLogin : handleAdminLogin}
+            onPress={
+              loginMode === 'employee' ? handleEmployeeLogin : handleAdminLogin
+            }
             disabled={isLoading}>
             {isLoading ? (
               <ActivityIndicator color={COLORS.white} />
             ) : (
               <Text style={styles.loginButtonText}>
-                {loginMode === 'employee' ? STRINGS.login.startButton : 'Admin Login'}
+                {loginMode === 'employee'
+                  ? STRINGS.login.startButton
+                  : 'Admin Login'}
               </Text>
             )}
           </TouchableOpacity>
@@ -342,20 +371,10 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.xl,
     alignItems: 'center',
   },
-  logoBox: {
-    width: 64,
-    height: 64,
-    borderRadius: SIZES.lg,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
+  logoImage: {
+    width: 72,
+    height: 72,
     marginBottom: SIZES.md,
-  },
-  logoText: {
-    fontSize: SIZES.lg,
-    fontWeight: '800',
-    color: COLORS.white,
-    letterSpacing: 1,
   },
   headerTitle: {
     fontSize: SIZES.xl,
@@ -387,7 +406,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     elevation: 2,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.1,
     shadowRadius: 2,
   },
@@ -523,6 +542,17 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  manageSitesLink: {
+    alignSelf: 'center',
+    marginTop: -SIZES.xs,
+    marginBottom: SIZES.lg,
+  },
+  manageSitesLinkText: {
+    color: COLORS.primary,
+    fontSize: SIZES.base,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
   },
 });
 

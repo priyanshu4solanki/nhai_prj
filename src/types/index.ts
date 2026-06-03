@@ -16,6 +16,7 @@ export type RootStackParamList = {
   };
   Sync: undefined;
   Home: undefined;
+  ManageSites: { adminUser?: string };
 };
 
 // Face detection and recognition types

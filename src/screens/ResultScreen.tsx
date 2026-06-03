@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import {
   View,
   Text,
@@ -6,16 +6,15 @@ import {
   SafeAreaView,
   TouchableOpacity,
   ScrollView,
-  Dimensions,
 } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 
-import { RootStackParamList } from '../types';
-import { COLORS, SIZES, STRINGS } from '../constants';
-import { globalStyles } from '../theme';
-import { getEmployee } from '../services/databaseService';
-import { attemptGeoAttendance } from '../utils/geofence';
-import { generateUUID, getCurrentTimestamp, formatTimestamp } from '../utils';
+import {RootStackParamList} from '../types';
+import {COLORS, SIZES, STRINGS} from '../constants';
+import {globalStyles} from '../theme';
+import {getEmployee} from '../services/databaseService';
+import {attemptGeoAttendance} from '../utils/geofence';
+import {getCurrentTimestamp, formatTimestamp} from '../utils';
 
 const formatDuration = (ms: number) => {
   const totalSec = Math.floor(ms / 1000);
@@ -27,19 +26,24 @@ const formatDuration = (ms: number) => {
 
 type ResultScreenProps = NativeStackScreenProps<RootStackParamList, 'Result'>;
 
-const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
-  const { employeeId, status, message } = route.params;
+const ResultScreen: React.FC<ResultScreenProps> = ({navigation, route}) => {
+  const {employeeId, status, message} = route.params;
   const isSuccess = status === 'success';
 
   const [employeeName, setEmployeeName] = useState('Employee');
   const [timestamp, setTimestamp] = useState<number>(getCurrentTimestamp());
   const [isSaved, setIsSaved] = useState(false);
-  const [presentDurationMs, setPresentDurationMs] = useState<number | null>(null);
+  const [presentDurationMs, setPresentDurationMs] = useState<number | null>(
+    null,
+  );
+  const [siteName, setSiteName] = useState('Checking Location...');
+  const [coords, setCoords] = useState<{latitude: number; longitude: number} | null>(null);
 
   useEffect(() => {
     if (isSuccess) {
       autoSaveAttendance();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const autoSaveAttendance = async () => {
@@ -53,34 +57,40 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
         setEmployeeName(employee.name);
       }
       // Attempt geofenced attendance (requests location permission internally)
-      const geoResult = await attemptGeoAttendance(employeeId, employee?.department);
+      const geoResult = (await attemptGeoAttendance(
+        employeeId,
+        employee?.department,
+      )) as any;
 
       if (geoResult.success) {
         setIsSaved(true);
+        setSiteName(geoResult.siteName || 'Detected Site');
+        setCoords(geoResult.coords || null);
         if (geoResult.action === 'check-out' && geoResult.durationMs) {
           setPresentDurationMs(geoResult.durationMs);
         }
       } else {
         setIsSaved(false);
-        // If outside geofence, preserve a helpful message in the UI
-        if (geoResult.reason === 'outside_geofence') {
-          // leave isSaved false and option for manual override remains
-        }
+        setSiteName('Outside Geofence');
+        setCoords(geoResult.coords || null);
       }
     } catch (error) {
       console.error('Failed to log attendance offline:', error);
+      setSiteName('Error Checking Location');
     }
   };
 
   return (
     <SafeAreaView style={[styles.container, globalStyles.container]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
         {/* Top Status Header */}
         <View style={styles.statusHeader}>
           <View
             style={[
               styles.indicatorCircle,
-              { backgroundColor: isSuccess ? COLORS.success : COLORS.error },
+              {backgroundColor: isSuccess ? COLORS.success : COLORS.error},
             ]}>
             <Text style={styles.indicatorGlyph}>{isSuccess ? '✓' : '✗'}</Text>
           </View>
@@ -99,8 +109,12 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
           <View style={styles.slipCard}>
             {/* Slip Header */}
             <View style={styles.slipHeader}>
-              <Text style={styles.slipHeaderTitle}>NATIONAL HIGHWAYS AUTHORITY OF INDIA</Text>
-              <Text style={styles.slipHeaderSubtitle}>OFFLINE ATTENDANCE SLIP</Text>
+              <Text style={styles.slipHeaderTitle}>
+                NATIONAL HIGHWAYS AUTHORITY OF INDIA
+              </Text>
+              <Text style={styles.slipHeaderSubtitle}>
+                OFFLINE ATTENDANCE SLIP
+              </Text>
             </View>
 
             {/* Slip Content */}
@@ -117,13 +131,15 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
 
               <View style={styles.slipRow}>
                 <Text style={styles.slipLabel}>Timestamp</Text>
-                <Text style={styles.slipValue}>{formatTimestamp(timestamp)}</Text>
+                <Text style={styles.slipValue}>
+                  {formatTimestamp(timestamp)}
+                </Text>
               </View>
 
               <View style={styles.slipRow}>
-                <Text style={styles.slipLabel}>Check-In Location</Text>
+                <Text style={styles.slipLabel}>Verification Location</Text>
                 <Text style={styles.slipValue} numberOfLines={2}>
-                  NHAI Site HQ (Lat: 28.57, Lon: 77.22)
+                  {siteName} {coords ? `(Lat: ${coords.latitude.toFixed(4)}, Lon: ${coords.longitude.toFixed(4)})` : ''}
                 </Text>
               </View>
 
@@ -135,18 +151,6 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
                   </Text>
                 </View>
               )}
-
-              <View style={styles.slipRow}>
-                <Text style={styles.slipLabel}>Liveness Status</Text>
-                <Text style={[styles.slipValue, { color: COLORS.success, fontWeight: '700' }]}>
-                  Verified (Blink Checked)
-                </Text>
-              </View>
-
-              <View style={styles.slipRow}>
-                <Text style={styles.slipLabel}>Math Accuracy</Text>
-                <Text style={styles.slipValue}>97.8% (Matched Embed)</Text>
-              </View>
             </View>
 
             {/* Slip Footer Badge */}
@@ -154,11 +158,17 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
               <View
                 style={[
                   styles.syncBadge,
-                  { backgroundColor: isSaved ? 'rgba(255, 152, 0, 0.15)' : COLORS.gray200 },
+                  {
+                    backgroundColor: isSaved
+                      ? 'rgba(255, 152, 0, 0.15)'
+                      : COLORS.gray200,
+                  },
                 ]}>
                 <View style={styles.syncDot} />
                 <Text style={styles.syncBadgeText}>
-                  {isSaved ? 'STORED OFFLINE (PENDING SYNC)' : 'STORING RECORD...'}
+                  {isSaved
+                    ? 'STORED OFFLINE (PENDING SYNC)'
+                    : 'STORING RECORD...'}
                 </Text>
               </View>
             </View>
@@ -167,10 +177,12 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
           <View style={styles.errorCard}>
             <Text style={styles.errorTitle}>Verification Error</Text>
             <Text style={styles.errorText}>
-              {message || 'The facial landmarks do not match credentials recorded for this ID.'}
+              {message ||
+                'The facial landmarks do not match credentials recorded for this ID.'}
             </Text>
             <Text style={styles.errorAdvice}>
-              Please ensure proper lighting, align your face within the oval guides, and blink slowly when prompted.
+              Please ensure proper lighting, align your face within the oval
+              guides, and blink slowly when prompted.
             </Text>
           </View>
         )}
@@ -180,17 +192,25 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ navigation, route }) => {
       <View style={styles.btnWrapper}>
         {isSuccess ? (
           <>
-            <TouchableOpacity style={styles.syncBtn} onPress={() => navigation.navigate('Sync')}>
+            <TouchableOpacity
+              style={styles.syncBtn}
+              onPress={() => navigation.navigate('Sync')}>
               <Text style={styles.syncBtnText}>View Sync Queue</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.homeBtn} onPress={() => navigation.navigate('Login')}>
+            <TouchableOpacity
+              style={styles.homeBtn}
+              onPress={() => navigation.navigate('Login')}>
               <Text style={styles.homeBtnText}>Back to Home</Text>
             </TouchableOpacity>
           </>
         ) : (
-          <TouchableOpacity style={styles.syncBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.syncBtnText}>{STRINGS.faceAuth.retryButton}</Text>
+          <TouchableOpacity
+            style={styles.syncBtn}
+            onPress={() => navigation.goBack()}>
+            <Text style={styles.syncBtnText}>
+              {STRINGS.faceAuth.retryButton}
+            </Text>
           </TouchableOpacity>
         )}
       </View>
@@ -222,7 +242,7 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.md,
     elevation: 3,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.15,
     shadowRadius: 3,
   },
@@ -252,7 +272,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 4,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.15,
     shadowRadius: 5,
     marginBottom: SIZES.lg,

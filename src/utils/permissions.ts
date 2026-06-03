@@ -78,20 +78,21 @@ export const requestStoragePermission = async (): Promise<CameraPermissionStatus
 export const requestLocationPermission = async (): Promise<{ granted: boolean; reason?: string }> => {
   try {
     if (Platform.OS === 'android') {
-      // Request fine location first
+      // Request both fine and coarse location
       const result = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         {
-          title: 'Location Permission',
+          title: 'Location Permission Required',
           message: 'This app needs access to your location to verify geofence attendance.',
           buttonNeutral: 'Ask Me Later',
           buttonNegative: 'Cancel',
-          buttonPositive: 'OK',
+          buttonPositive: 'Allow',
         }
       );
 
+      console.log('Location permission result:', result);
       const granted = result === PermissionsAndroid.RESULTS.GRANTED;
-      return { granted, reason: granted ? undefined : 'Permission denied' };
+      return { granted, reason: granted ? undefined : `Permission result: ${result}` };
     }
 
     // iOS: Info.plist must be configured; assume granted for now

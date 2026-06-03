@@ -24,3 +24,22 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+// Disable native build for react-native-screens to fix CMake compatibility issues
+ext {
+    skipRNScreensNativeModule = true
+}
+
+// Apply CMake disable fix for react-native-screens module
+subprojects {
+    if (project.name == "react-native-screens") {
+        afterEvaluate {
+            // Disable externalNativeBuild to skip CMake configuration
+            tasks.each { task ->
+                if (task.name.contains("configureCMakeDebug") || task.name.contains("configureCMakeRelease")) {
+                    task.enabled = false
+                }
+            }
+        }
+    }
+}

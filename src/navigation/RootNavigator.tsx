@@ -12,6 +12,7 @@ import LivenessScreen from '../screens/LivenessScreen';
 import RecognitionScreen from '../screens/RecognitionScreen';
 import ResultScreen from '../screens/ResultScreen';
 import SyncScreen from '../screens/SyncScreen';
+import ManageSitesScreen from '../screens/ManageSitesScreen';
 
 import { RootStackParamList } from '../types';
 
@@ -69,6 +70,10 @@ export const RootNavigator = () => {
         <Stack.Screen
           name="Sync"
           component={SyncScreen}
+        />
+        <Stack.Screen
+          name="ManageSites"
+          component={ManageSitesScreen}
         />
       </Stack.Navigator>
     </NavigationContainer>

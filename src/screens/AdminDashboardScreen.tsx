@@ -111,6 +111,22 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({ navigation, route
           <Text style={styles.actionArrow}>›</Text>
         </TouchableOpacity>
 
+        {/* Manage Geofence Sites */}
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => navigation.navigate('ManageSites', { adminUser })}>
+          <View style={[styles.actionIconContainer, { backgroundColor: 'rgba(76, 175, 80, 0.12)' }]}>
+            <Text style={styles.actionIcon}>📍</Text>
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>Configure Geofence Sites</Text>
+            <Text style={styles.actionDesc}>
+              View, register, and modify project site coordinates and geofence boundaries
+            </Text>
+          </View>
+          <Text style={styles.actionArrow}>›</Text>
+        </TouchableOpacity>
+
         {/* Security Info */}
         <View style={styles.securityBox}>
           <Text style={styles.securityTitle}>Security Notice</Text>
