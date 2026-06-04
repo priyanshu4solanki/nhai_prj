@@ -17,7 +17,7 @@ import {RootStackParamList} from '../types';
 import {COLORS, SIZES, STRINGS} from '../constants';
 import {globalStyles} from '../theme';
 import {validateEmployeeId} from '../utils';
-import {startSession, getEmployee} from '../services/databaseService';
+import {getEmployee, hasCompletedAttendanceToday} from '../services/databaseService';
 
 type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -133,15 +133,63 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
         return;
       }
 
-      await startSession(employeeId, selectedDepartment);
+      // Check if employee has completed both check-in and check-out today
+      const alreadyCompleted = await hasCompletedAttendanceToday(employeeId);
+      if (alreadyCompleted) {
+        setError('Attendance already completed for today. You cannot log check-in/out multiple times.');
+        setIsLoading(false);
+        return;
+      }
 
       navigation.navigate('FaceAuth', {
         employeeId,
         department: selectedDepartment,
       });
     } catch (err) {
-      setError('Failed to start session');
+      setError('Failed to proceed to face authentication');
       console.error('Login error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEmployeeViewAttendance = async () => {
+    setError('');
+
+    if (!employeeId.trim()) {
+      setError(STRINGS.login.invalidEmployeeId);
+      return;
+    }
+
+    if (!validateEmployeeId(employeeId)) {
+      setError(
+        'Invalid Employee ID format (3-20 characters, letters/numbers and hyphen allowed)',
+      );
+      return;
+    }
+
+    if (!selectedDepartment) {
+      setError(STRINGS.login.selectDepartment);
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+
+      const employee = await getEmployee(employeeId);
+      if (!employee) {
+        setError(
+          `Employee ID "${employeeId}" is not registered. Contact your administrator to register.`,
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Open their personal SyncScreen (My Attendance) directly
+      navigation.navigate('Sync', { employeeId: employeeId.trim().toUpperCase() });
+    } catch (err) {
+      setError('Failed to load attendance');
+      console.error('View attendance error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -149,6 +197,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
   return (
     <SafeAreaView style={[styles.container, globalStyles.container]}>
+
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
@@ -320,26 +370,48 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
           ) : null}
 
           {/* Login Button */}
-          <TouchableOpacity
-            style={[
-              styles.loginButton,
-              loginMode === 'admin' && styles.adminLoginButton,
-              isLoading && styles.loginButtonDisabled,
-            ]}
-            onPress={
-              loginMode === 'employee' ? handleEmployeeLogin : handleAdminLogin
-            }
-            disabled={isLoading}>
-            {isLoading ? (
-              <ActivityIndicator color={COLORS.white} />
-            ) : (
-              <Text style={styles.loginButtonText}>
-                {loginMode === 'employee'
-                  ? STRINGS.login.startButton
-                  : 'Admin Login'}
-              </Text>
-            )}
-          </TouchableOpacity>
+          {loginMode === 'employee' ? (
+            <>
+              <TouchableOpacity
+                style={[
+                  styles.loginButton,
+                  isLoading && styles.loginButtonDisabled,
+                ]}
+                onPress={handleEmployeeLogin}
+                disabled={isLoading}>
+                {isLoading ? (
+                  <ActivityIndicator color={COLORS.white} />
+                ) : (
+                  <Text style={styles.loginButtonText}>Proceed to Mark Attendance</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.viewAttendanceButton,
+                  isLoading && styles.loginButtonDisabled,
+                ]}
+                onPress={handleEmployeeViewAttendance}
+                disabled={isLoading}>
+                <Text style={styles.viewAttendanceButtonText}>View My Attendance</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.loginButton,
+                styles.adminLoginButton,
+                isLoading && styles.loginButtonDisabled,
+              ]}
+              onPress={handleAdminLogin}
+              disabled={isLoading}>
+              {isLoading ? (
+                <ActivityIndicator color={COLORS.white} />
+              ) : (
+                <Text style={styles.loginButtonText}>Admin Login</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Info */}
@@ -359,6 +431,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  settingsIconBtn: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.white,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    zIndex: 100,
+    elevation: 3,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  settingsIconText: {
+    fontSize: 22,
+    color: '#475569',
+    fontWeight: 'bold',
   },
   scrollContent: {
     flexGrow: 1,
@@ -543,6 +639,22 @@ const styles = StyleSheet.create({
     fontSize: SIZES.lg,
     fontWeight: '600',
     color: COLORS.white,
+  },
+  viewAttendanceButton: {
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: COLORS.primary,
+    paddingVertical: SIZES.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: SIZES.buttonHeight,
+    marginTop: SIZES.md,
+  },
+  viewAttendanceButtonText: {
+    fontSize: SIZES.lg,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
   infoContainer: {
     backgroundColor: COLORS.gray100,

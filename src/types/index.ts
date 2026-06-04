@@ -6,7 +6,7 @@ export type RootStackParamList = {
   Register: { adminUser?: string };
   ManageEmployees: { adminUser?: string };
   FaceAuth: { employeeId: string; department: string };
-  Liveness: { employeeId: string; department: string };
+  Liveness: { employeeId: string; department: string; faceVector?: number[] };
   Recognition: { employeeId: string; department: string; faceVector?: number[] };
   Result: {
     employeeId: string;
@@ -14,7 +14,7 @@ export type RootStackParamList = {
     message?: string;
     timestamp?: number;
   };
-  Sync: undefined;
+  Sync: { employeeId?: string };
   Home: undefined;
   ManageSites: { adminUser?: string };
 };

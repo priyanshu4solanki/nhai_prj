@@ -92,28 +92,72 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
       }
 
       const preRegisteredVector = employee.faceVector;
+      const liveFaceVector = route.params?.faceVector;
 
-      // Extract a simulated live face vector containing slight coordinate jitter
-      // representing real-time lighting noise (typically +/- 0.04 variation)
-      const simulatedLiveVector = preRegisteredVector.map(
-        (val: number) => val + (Math.random() - 0.5) * 0.05
-      );
+      // ── Security Check 1: No live face vector captured ──────────────────────
+      if (!liveFaceVector || liveFaceVector.length === 0) {
+        navigation.navigate('Result', {
+          employeeId,
+          status: 'failure',
+          message: `Face capture failed — landmarks not detected. Please ensure good lighting and look directly at the camera.`,
+        });
+        return;
+      }
 
-      // Perform real Cosine Similarity comparison entirely offline!
-      const comparison = compareFaceVectors(simulatedLiveVector, preRegisteredVector);
+      // ── Security Check 2: Employee registered with random mock vector ────────
+      // A proper face vector now has 128 unique non-repeating values.
+      // A mock/random vector from generateRandomFaceVector has high variance with no geometric structure.
+      // Detect legacy random vectors by checking if the stored length mismatches or is structurally invalid.
+      const isLegacyMockVector = (v: number[]) => {
+        if (!v || v.length !== 128) return true;
+        // Real geometric vectors have values in a bounded range from face ratios
+        // Random mock vectors have values spread across a wide range (Math.random() * 2 - 1)
+        const maxVal = Math.max(...v);
+        const minVal = Math.min(...v);
+        const range = maxVal - minVal;
+        // Real face vectors have values roughly in range [-5, 15] (scaled ratios)
+        // Random mock vectors have range close to 2 (between -1 and 1)
+        // If range < 3 and values are all between -1.5 and 1.5, it's a legacy random mock
+        const allSmall = v.every(val => Math.abs(val) <= 1.5);
+        return allSmall && range < 3;
+      };
+
+      if (isLegacyMockVector(preRegisteredVector)) {
+        navigation.navigate('Result', {
+          employeeId,
+          status: 'failure',
+          message: `Face not properly registered for ID ${employeeId}. Please ask your administrator to re-register your face.`,
+        });
+        return;
+      }
+
+      // ── Security Check 3: Live vector must also be a real capture ────────────
+      if (isLegacyMockVector(liveFaceVector)) {
+        navigation.navigate('Result', {
+          employeeId,
+          status: 'failure',
+          message: `Live face capture failed — insufficient landmark data. Please try in better lighting.`,
+        });
+        return;
+      }
+
+      // ── Face Comparison: Real vs Real vectors ────────────────────────────────
+      // Threshold 0.75: strict enough to reject different people, lenient enough
+      // for same-person variation (lighting, angle, expression)
+      const comparison = compareFaceVectors(liveFaceVector, preRegisteredVector, 0.75);
+      const matchPercentage = (comparison.similarity * 100).toFixed(1);
 
       if (comparison.matched) {
-        const matchPercentage = (comparison.similarity * 100).toFixed(1);
         navigation.navigate('Result', {
           employeeId,
           status: 'success',
-          message: `Face recognized successfully. Match confidence is ${matchPercentage}% (Threshold 65.0%)`,
+          message: `Face recognized successfully. Match confidence: ${matchPercentage}%`,
         });
       } else {
         navigation.navigate('Result', {
           employeeId,
           status: 'failure',
-          message: `Facial structure matching failed. Vector similarity was too low.`,
+          message: `Face does not match registered credentials for ID ${employeeId}. Similarity: ${matchPercentage}% (required: 75%). Ensure you are the registered employee.`,
         });
       }
     } catch (error) {

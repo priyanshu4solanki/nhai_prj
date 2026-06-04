@@ -171,13 +171,15 @@ const createTables = async () => {
         photo_path TEXT,
         face_vector TEXT,
         created_at INTEGER,
-        updated_at INTEGER
+        updated_at INTEGER,
+        synced INTEGER DEFAULT 0
       );`,
       [
         {name: 'photo_path', definition: 'TEXT'},
         {name: 'face_vector', definition: 'TEXT'},
         {name: 'created_at', definition: 'INTEGER'},
         {name: 'updated_at', definition: 'INTEGER'},
+        {name: 'synced', definition: 'INTEGER DEFAULT 0'},
       ],
     );
 
@@ -542,9 +544,10 @@ export const getAllAttendanceRecords = async (limit = 100) => {
 
   try {
     const [result] = await db.executeSql(
-      `SELECT a.*, s.site_name 
+      `SELECT a.*, s.site_name, e.name AS employee_name
        FROM attendance a 
        LEFT JOIN sites s ON a.site_id = s.site_id 
+       LEFT JOIN employees e ON a.employee_id = e.id
        ORDER BY a.timestamp DESC LIMIT ?`,
       [limit],
     );
@@ -597,26 +600,27 @@ export const deleteAttendanceRecord = async recordUuid => {
 };
 
 // Employee operations
-export const insertOrUpdateEmployee = async employee => {
+export const insertOrUpdateEmployee = async (employee, synced = 0) => {
   if (!db) {
     return {success: false, error: 'Database not initialized'};
   }
 
   try {
-    const {id, name, department, photoPath, faceVector} = employee;
+    const {id, name, department, photoPath, faceVector, createdAt, updatedAt} = employee;
 
     await db.executeSql(
       `INSERT OR REPLACE INTO employees (
-        id, name, department, photo_path, face_vector, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        id, name, department, photo_path, face_vector, created_at, updated_at, synced
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         name,
         department,
         photoPath || null,
         faceVector ? JSON.stringify(faceVector) : null,
-        Date.now(),
-        Date.now(),
+        createdAt || Date.now(),
+        updatedAt || Date.now(),
+        synced,
       ],
     );
 
@@ -910,6 +914,129 @@ export const clearSyncQueue = async () => {
   } catch (error) {
     console.log('Error clearing sync queue:', error);
     return {success: false, error: error?.message || error?.toString() || error};
+  }
+};
+
+// Two-way sync database helpers
+export const getPendingSyncEmployees = async () => {
+  if (!db) {
+    return [];
+  }
+
+  try {
+    const [result] = await db.executeSql(
+      'SELECT * FROM employees WHERE synced = 0'
+    );
+
+    const rows = extractRows(result);
+    return rows.map(emp => {
+      if (emp.face_vector) {
+        try {
+          emp.faceVector = JSON.parse(emp.face_vector);
+        } catch (e) {
+          console.log('Error parsing face vector JSON:', e);
+        }
+      }
+      return emp;
+    });
+  } catch (error) {
+    console.log('Error fetching pending sync employees:', error);
+    return [];
+  }
+};
+
+export const markEmployeeAsSynced = async employeeId => {
+  if (!db) {
+    return {success: false, error: 'Database not initialized'};
+  }
+
+  try {
+    await db.executeSql(
+      'UPDATE employees SET synced = 1 WHERE id = ?',
+      [employeeId]
+    );
+
+    return {success: true};
+  } catch (error) {
+    console.log('Error marking employee as synced:', error);
+    return {success: false, error};
+  }
+};
+
+export const insertSyncedAttendance = async record => {
+  if (!db) {
+    return {success: false, error: 'Database not initialized'};
+  }
+
+  try {
+    const uuid = record.uuid;
+    const empId = record.employee_id || record.employeeId;
+    const dept = record.department;
+    const timestamp = record.timestamp;
+    const checkType = record.check_type || record.checkType;
+    const loc = record.location;
+    const verified = record.verified !== undefined ? record.verified : 1;
+    const faceConf = record.face_confidence || record.faceConfidence || 0;
+    const livenessConf = record.liveness_confidence || record.livenessConfidence || 0;
+    const recogConf = record.recognition_confidence || record.recognitionConfidence || 0;
+    const siteId = record.site_id || record.siteId;
+    const duration = record.duration || 0;
+    const createdAt = record.created_at || record.createdAt || Date.now();
+    const syncedAt = record.synced_at || record.syncedAt || Date.now();
+
+    await db.executeSql(
+      `INSERT OR IGNORE INTO attendance (
+        uuid, employee_id, department, timestamp, check_type, location, 
+        verified, synced, face_confidence, liveness_confidence, 
+        recognition_confidence, created_at, synced_at, site_id, duration
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        uuid,
+        empId,
+        dept,
+        timestamp,
+        checkType,
+        loc || null,
+        verified,
+        faceConf,
+        livenessConf,
+        recogConf,
+        createdAt,
+        syncedAt,
+        siteId || null,
+        duration,
+      ],
+    );
+
+    return {success: true};
+  } catch (error) {
+    console.log('Error inserting synced attendance record:', error);
+    return {success: false, error: error?.message || error?.toString() || error};
+  }
+};
+
+export const hasCompletedAttendanceToday = async employeeId => {
+  if (!db) {
+    return false;
+  }
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const startOfDayMs = today.getTime();
+    today.setHours(23, 59, 59, 999);
+    const endOfDayMs = today.getTime();
+
+    const [result] = await db.executeSql(
+      'SELECT check_type FROM attendance WHERE employee_id = ? AND timestamp >= ? AND timestamp <= ?',
+      [employeeId, startOfDayMs, endOfDayMs],
+    );
+    const rows = extractRows(result);
+    const hasCheckIn = rows.some(r => r.check_type === 'check-in' || r.check_type === 'check_in');
+    const hasCheckOut = rows.some(r => r.check_type === 'check-out' || r.check_type === 'check_out');
+    return hasCheckIn && hasCheckOut;
+  } catch (error) {
+    console.log('Error checking if employee completed attendance today:', error);
+    return false;
   }
 };
 

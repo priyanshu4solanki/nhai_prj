@@ -17,7 +17,7 @@ import { RootStackParamList } from '../types';
 import { COLORS, SIZES, STRINGS } from '../constants';
 import { globalStyles } from '../theme';
 import { insertOrUpdateEmployee } from '../services/databaseService';
-import { generateRandomFaceVector, validateEmployeeId } from '../utils';
+import { generateRandomFaceVector, validateEmployeeId, computeFaceVector } from '../utils';
 
 type RegisterScreenProps = NativeStackScreenProps<RootStackParamList, 'Register'>;
 
@@ -63,7 +63,65 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  // Real-time face tracking state
+  const [detectedFace, setDetectedFace] = useState<any>(null);
+  const [isAligned, setIsAligned] = useState(false);
+  const [cameraInstruction, setCameraInstruction] = useState('Align face inside the oval frame');
+
   const cameraRef = useRef<RNCamera | null>(null);
+
+  const handleFacesDetected = ({ faces }: { faces: any[] }) => {
+    if (faces.length === 0) {
+      setIsAligned(false);
+      setCameraInstruction('No face detected. Look directly into camera.');
+      setDetectedFace(null);
+      return;
+    }
+
+    if (faces.length > 1) {
+      setIsAligned(false);
+      setCameraInstruction('Multiple faces detected. Keep one face in frame.');
+      setDetectedFace(null);
+      return;
+    }
+
+    const face = faces[0];
+    setDetectedFace(face);
+
+    const { origin, size } = face.bounds;
+    const screenWidth = Dimensions.get('window').width;
+    const screenHeight = Dimensions.get('window').height;
+
+    // Check bounds center relative to the viewport
+    const faceCenterX = origin.x + size.width / 2;
+    const faceCenterY = origin.y + size.height / 2;
+
+    const viewportCenterX = screenWidth / 2;
+    const viewportCenterY = screenHeight / 2 - 40;
+
+    const isXCentered = Math.abs(faceCenterX - viewportCenterX) < 110;
+    const isYCentered = Math.abs(faceCenterY - viewportCenterY) < 130;
+
+    if (!isXCentered || !isYCentered) {
+      setCameraInstruction('Align face inside the oval frame');
+      setIsAligned(false);
+    } else if (size.width < 120) {
+      setCameraInstruction('Move closer to the camera');
+      setIsAligned(false);
+    } else if (size.width > 270) {
+      setCameraInstruction('Move away from the camera');
+      setIsAligned(false);
+    } else {
+      const vector = computeFaceVector(face);
+      if (vector) {
+        setCameraInstruction('Perfect! Hold still and tap Capture.');
+        setIsAligned(true);
+      } else {
+        setCameraInstruction('Look straight, ensure eyes and mouth are visible');
+        setIsAligned(false);
+      }
+    }
+  };
 
   const handleStartCapture = () => {
     setError('');
@@ -94,20 +152,37 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
   const handleCaptureAndRegister = async () => {
     if (isLoading) return;
     setError('');
+
+    if (!detectedFace) {
+      setError('No face detected in camera frame. Please align face before capturing.');
+      return;
+    }
+
+    if (!isAligned) {
+      setError('Face is not properly aligned. Please center face inside the oval.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       // Simulate physical snapshot delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Generate a normalized 128-dimensional embedding offline
-      const simulatedFaceVector = generateRandomFaceVector();
+      // Extract facial embedding vector from the real detected face landmarks
+      const faceVector = computeFaceVector(detectedFace);
+
+      if (!faceVector) {
+        setError('Failed to extract facial features. Ensure good lighting and look straight.');
+        setIsLoading(false);
+        return;
+      }
 
       const employeeData = {
         id: employeeId.trim().toUpperCase(),
         name: name.trim(),
         department: selectedDepartment,
-        faceVector: simulatedFaceVector,
+        faceVector: faceVector,
       };
 
       const result = await insertOrUpdateEmployee(employeeData);
@@ -173,6 +248,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
           type={RNCamera.Constants.Type.front}
           flashMode={RNCamera.Constants.FlashMode.off}
           captureAudio={false}
+          faceDetectorEnabled={true}
+          faceDetectionMode={RNCamera.Constants.FaceDetection.Mode.accurate}
+          faceDetectionLandmarks={RNCamera.Constants.FaceDetection.Landmarks.all}
+          faceDetectionClassifications={RNCamera.Constants.FaceDetection.Classifications.all}
+          onFacesDetected={handleFacesDetected}
           androidCameraPermissionOptions={{
             title: 'Camera Permission',
             message: 'We need camera permission for offline face capture.',
@@ -183,10 +263,15 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
 
         {/* Alignment Oval Overlay */}
         <View style={styles.cameraOverlayContainer}>
-          <View style={styles.ovalHole} />
+          <View
+            style={[
+              styles.ovalHole,
+              isAligned && { borderColor: COLORS.success }
+            ]}
+          />
           <View style={styles.guideContainer}>
             <Text style={styles.cameraGuideText}>
-              Center your face within the oval and hold still.
+              {cameraInstruction}
             </Text>
           </View>
         </View>
@@ -201,9 +286,12 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.captureActionButton}
+            style={[
+              styles.captureActionButton,
+              !isAligned && { opacity: 0.5 }
+            ]}
             onPress={handleCaptureAndRegister}
-            disabled={isLoading}>
+            disabled={isLoading || !isAligned}>
             {isLoading ? (
               <ActivityIndicator color={COLORS.white} />
             ) : (

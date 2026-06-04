@@ -14,6 +14,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../types';
 import { COLORS, SIZES, STRINGS } from '../constants';
 import { globalStyles } from '../theme';
+import { computeFaceVector } from '../utils';
+import { hasCompletedAttendanceToday } from '../services/databaseService';
 
 type FaceAuthScreenProps = NativeStackScreenProps<RootStackParamList, 'FaceAuth'>;
 
@@ -24,6 +26,21 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
   const [instruction, setInstruction] = useState(STRINGS.faceAuth.detectingFace);
   const [isAligned, setIsAligned] = useState(false);
   const [pulseAnim] = useState(new Animated.Value(1));
+  const [capturedFaceVector, setCapturedFaceVector] = useState<number[] | null>(null);
+
+  // Check if attendance is already completed today
+  useEffect(() => {
+    const checkAttendance = async () => {
+      const completed = await hasCompletedAttendanceToday(employeeId);
+      if (completed) {
+        setInstruction('Attendance already completed for today.');
+        setTimeout(() => {
+          navigation.navigate('Login');
+        }, 2500);
+      }
+    };
+    checkAttendance();
+  }, [employeeId]);
 
   // Pulse animation for alignment box
   useEffect(() => {
@@ -53,11 +70,16 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
   }, [isAligned]);
 
   // Automated progress transition to Liveness
+  // Only requires isAligned — face vector is optional (RecognitionScreen handles legacy/empty vectors)
   useEffect(() => {
     let timeout: NodeJS.Timeout;
     if (isAligned) {
       timeout = setTimeout(() => {
-        navigation.navigate('Liveness', { employeeId, department });
+        navigation.navigate('Liveness', { 
+          employeeId, 
+          department, 
+          faceVector: capturedFaceVector || [] 
+        });
       }, 1500);
     }
     return () => clearTimeout(timeout);
@@ -98,15 +120,25 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
     if (!isXCentered || !isYCentered) {
       setInstruction('Align face inside the oval frame');
       setIsAligned(false);
+      setCapturedFaceVector(null);
     } else if (size.width < 120) {
       setInstruction(STRINGS.faceAuth.moveCloser);
       setIsAligned(false);
+      setCapturedFaceVector(null);
     } else if (size.width > 270) {
       setInstruction(STRINGS.faceAuth.moveAway);
       setIsAligned(false);
+      setCapturedFaceVector(null);
     } else {
+      // Face is correctly positioned — mark as aligned regardless of landmark availability
+      // computeFaceVector may return null on devices without full ML Kit support
+      const vector = computeFaceVector(face);
       setInstruction(STRINGS.faceAuth.faceDetected);
       setIsAligned(true);
+      if (vector) {
+        setCapturedFaceVector(vector);
+      }
+      // If no vector computed, we still proceed — RecognitionScreen uses legacy fallback
     }
   };
 
@@ -127,7 +159,8 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
           type={RNCamera.Constants.Type.front}
           flashMode={RNCamera.Constants.FlashMode.off}
           captureAudio={false}
-          faceDetectionMode={RNCamera.Constants.FaceDetection.Mode.fast}
+          faceDetectorEnabled={true}
+          faceDetectionMode={RNCamera.Constants.FaceDetection.Mode.accurate}
           faceDetectionLandmarks={RNCamera.Constants.FaceDetection.Landmarks.all}
           faceDetectionClassifications={RNCamera.Constants.FaceDetection.Classifications.all}
           onFacesDetected={handleFacesDetected}

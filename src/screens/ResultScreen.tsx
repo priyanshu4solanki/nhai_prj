@@ -15,6 +15,7 @@ import {globalStyles} from '../theme';
 import {getEmployee} from '../services/databaseService';
 import {attemptGeoAttendance} from '../utils/geofence';
 import {getCurrentTimestamp, formatTimestamp} from '../utils';
+import {runBackgroundSync} from '../services/syncService';
 
 const formatDuration = (ms: number) => {
   const totalSec = Math.floor(ms / 1000);
@@ -69,6 +70,9 @@ const ResultScreen: React.FC<ResultScreenProps> = ({navigation, route}) => {
         if (geoResult.action === 'check-out' && geoResult.durationMs) {
           setPresentDurationMs(geoResult.durationMs);
         }
+        
+        // Automatically sync in background immediately if online
+        runBackgroundSync().catch(err => console.log('Auto-sync on attendance fail:', err));
       } else {
         setIsSaved(false);
         setSiteName('Outside Geofence');
@@ -194,8 +198,8 @@ const ResultScreen: React.FC<ResultScreenProps> = ({navigation, route}) => {
           <>
             <TouchableOpacity
               style={styles.syncBtn}
-              onPress={() => navigation.navigate('Sync')}>
-              <Text style={styles.syncBtnText}>View Sync Queue</Text>
+              onPress={() => navigation.navigate('Sync', { employeeId })}>
+              <Text style={styles.syncBtnText}>View My Attendance</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

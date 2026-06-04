@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useState, useRef} from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 
+const HARDCODED_SERVER_URL = 'http://localhost:3000';
+
 import {RootStackParamList} from '../types';
 import {COLORS, SIZES, STRINGS} from '../constants';
 import {globalStyles} from '../theme';
@@ -20,6 +22,10 @@ import {
   getPendingSyncRecords,
   getAllAttendanceRecords,
   markRecordAsSynced,
+  getPendingSyncEmployees,
+  markEmployeeAsSynced,
+  insertOrUpdateEmployee,
+  insertSyncedAttendance,
 } from '../services/databaseService';
 import {
   checkInternetConnectivity,
@@ -41,6 +47,25 @@ const formatDuration = (ms: number) => {
   if (minutes > 0) parts.push(`${minutes}m`);
   if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
   return parts.join(' ');
+};
+
+const formatTimeOnly = (ts: number): string => {
+  const date = new Date(ts);
+  return date.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+};
+
+const formatDateOnly = (ts: number): string => {
+  const date = new Date(ts);
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 };
 
 const generateDaysList = () => {
@@ -81,7 +106,8 @@ const generateDaysList = () => {
   return list;
 };
 
-const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
+const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
+  const employeeId = route.params?.employeeId;
   const [pendingRecords, setPendingRecords] = useState<any[]>([]);
   const [allRecords, setAllRecords] = useState<any[]>([]);
   const [isOnline, setIsOnline] = useState(false);
@@ -92,6 +118,311 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedDayId, setSelectedDayId] = useState('day_0');
+
+  // Server config & pending count state
+  const [pendingEmployeesCount, setPendingEmployeesCount] = useState(0);
+
+  const pendingRecordsRef = useRef(pendingRecords);
+  const pendingEmployeesCountRef = useRef(pendingEmployeesCount);
+  const isSyncingRef = useRef(isSyncing);
+
+  useEffect(() => {
+    pendingRecordsRef.current = pendingRecords;
+    pendingEmployeesCountRef.current = pendingEmployeesCount;
+    isSyncingRef.current = isSyncing;
+  }, [pendingRecords, pendingEmployeesCount, isSyncing]);
+
+  // Calendar States for Employee dashboard
+  const todayDateObj = new Date();
+  const [calendarMonth, setCalendarMonth] = useState(todayDateObj.getMonth());
+  const [calendarYear, setCalendarYear] = useState(todayDateObj.getFullYear());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<number | null>(null);
+  const [showDayDetailModal, setShowDayDetailModal] = useState(false);
+
+  const MONTH_NAMES = React.useMemo(() => [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ], []);
+
+  const monthRecords = React.useMemo(() => {
+    return allRecords.filter(r => {
+      const d = new Date(r.timestamp);
+      return d.getMonth() === calendarMonth && d.getFullYear() === calendarYear;
+    });
+  }, [allRecords, calendarMonth, calendarYear]);
+
+  const daysWithLogs = React.useMemo(() => {
+    const map: { [day: number]: any[] } = {};
+    monthRecords.forEach(r => {
+      const day = new Date(r.timestamp).getDate();
+      if (!map[day]) {
+        map[day] = [];
+      }
+      map[day].push(r);
+    });
+    return map;
+  }, [monthRecords]);
+
+  const calendarStats = React.useMemo(() => {
+    let fullDays = 0;
+    let totalDurationMs = 0;
+    let activeDays = 0;
+
+    Object.keys(daysWithLogs).forEach(dayStr => {
+      const day = parseInt(dayStr, 10);
+      const logs = daysWithLogs[day];
+      const hasIn = logs.some(r => r.check_type === 'check-in');
+      const hasOut = logs.some(r => r.check_type === 'check-out');
+      if (hasIn || hasOut) {
+        activeDays++;
+      }
+      if (hasIn && hasOut) {
+        fullDays++;
+      }
+      logs.filter(r => r.check_type === 'check-out').forEach(r => {
+        totalDurationMs += (r.duration || 0);
+      });
+    });
+
+    const totalHours = totalDurationMs / (1000 * 60 * 60);
+    const avgHours = activeDays > 0 ? totalHours / activeDays : 0;
+
+    return {
+      fullDays,
+      totalHours: totalHours.toFixed(1),
+      avgHours: avgHours.toFixed(1),
+    };
+  }, [daysWithLogs]);
+
+  const handlePrevMonth = () => {
+    if (calendarMonth === 0) {
+      setCalendarMonth(11);
+      setCalendarYear(calendarYear - 1);
+    } else {
+      setCalendarMonth(calendarMonth - 1);
+    }
+    setSelectedCalendarDay(null);
+  };
+
+  const handleNextMonth = () => {
+    if (calendarMonth === 11) {
+      setCalendarMonth(0);
+      setCalendarYear(calendarYear + 1);
+    } else {
+      setCalendarMonth(calendarMonth + 1);
+    }
+    setSelectedCalendarDay(null);
+  };
+
+  const renderEmployeeAttendanceView = () => {
+    const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
+    const firstDayIndex = new Date(calendarYear, calendarMonth, 1).getDay();
+    
+    const cells = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      cells.push(<View key={`empty-${i}`} style={styles.calendarDayCellEmpty} />);
+    }
+    
+    const todayDate = new Date();
+    const isCurrentMonth = todayDate.getMonth() === calendarMonth && todayDate.getFullYear() === calendarYear;
+    const todayDay = todayDate.getDate();
+    
+    for (let d = 1; d <= daysInMonth; d++) {
+      const logs = daysWithLogs[d] || [];
+      const hasCheckIn = logs.some(r => r.check_type === 'check-in');
+      const hasCheckOut = logs.some(r => r.check_type === 'check-out');
+      
+      let dotColor = null;
+      let status = 'none';
+      
+      const cellDate = new Date(calendarYear, calendarMonth, d);
+      cellDate.setHours(0, 0, 0, 0);
+      const todayCompare = new Date(todayDate);
+      todayCompare.setHours(0, 0, 0, 0);
+      
+      if (logs.length > 0) {
+        if (hasCheckIn && hasCheckOut) {
+          status = 'full';
+          dotColor = COLORS.success;
+        } else {
+          status = 'partial';
+          dotColor = '#ffb300';
+        }
+      } else if (cellDate < todayCompare) {
+        status = 'absent';
+        dotColor = COLORS.error;
+      }
+      
+      const isToday = isCurrentMonth && d === todayDay;
+      const isSelected = selectedCalendarDay === d;
+      
+      cells.push(
+        <TouchableOpacity
+          key={`day-${d}`}
+          style={[
+            styles.calendarDayCell,
+            isToday && styles.calendarDayCellToday,
+            isSelected && styles.calendarDayCellSelected,
+          ]}
+          onPress={() => {
+            setSelectedCalendarDay(d);
+            setShowDayDetailModal(true);
+          }}>
+          <Text style={[
+            styles.calendarDayText,
+            isToday && styles.calendarDayTextToday,
+            isSelected && styles.calendarDayTextSelected,
+          ]}>
+            {d}
+          </Text>
+          {dotColor && (
+            <View style={[styles.calendarDayDot, { backgroundColor: dotColor }]} />
+          )}
+        </TouchableOpacity>
+      );
+    }
+
+    const selectedDayLogs = selectedCalendarDay ? (daysWithLogs[selectedCalendarDay] || []) : [];
+    const checkInRecord = selectedDayLogs.find(r => r.check_type === 'check-in');
+    const checkOutRecord = selectedDayLogs.find(r => r.check_type === 'check-out');
+
+    const checkInTime = checkInRecord ? formatTimeOnly(checkInRecord.timestamp) : 'Not Logged';
+    const checkOutTime = checkOutRecord ? formatTimeOnly(checkOutRecord.timestamp) : (checkInRecord ? 'Active Session' : 'Not Logged');
+    const workedDuration = (checkInRecord && checkOutRecord)
+      ? formatDuration(checkOutRecord.timestamp - checkInRecord.timestamp)
+      : '--';
+    const checkInLocation = checkInRecord ? (checkInRecord.site_name || checkInRecord.location || 'N/A') : 'N/A';
+    const checkOutLocation = checkOutRecord ? (checkOutRecord.site_name || checkOutRecord.location || 'N/A') : 'N/A';
+    const isSynced = selectedDayLogs.length > 0 && selectedDayLogs.every(r => r.synced === 1);
+
+    const selectedDateStr = selectedCalendarDay
+      ? new Date(calendarYear, calendarMonth, selectedCalendarDay).toLocaleDateString('en-IN', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        })
+      : '';
+
+    return (
+      <SafeAreaView style={[styles.container, globalStyles.container]}>
+        <View style={styles.header}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <TouchableOpacity
+              style={styles.backArrowBtn}
+              onPress={() => navigation.navigate('Login')}
+              activeOpacity={0.7}>
+              <Text style={styles.backArrowText}>←</Text>
+            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.title}>My Attendance</Text>
+              <Text style={styles.subtitle}>ID: {employeeId} • Monthly Calendar</Text>
+            </View>
+          </View>
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+          <View style={styles.calendarContainer}>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity onPress={handlePrevMonth} style={styles.monthNavBtn}>
+                <Text style={styles.monthNavBtnText}>◀</Text>
+              </TouchableOpacity>
+              <Text style={styles.monthLabel}>
+                {MONTH_NAMES[calendarMonth]} {calendarYear}
+              </Text>
+              <TouchableOpacity onPress={handleNextMonth} style={styles.monthNavBtn}>
+                <Text style={styles.monthNavBtnText}>▶</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.weekdaysRow}>
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                <Text key={day} style={styles.weekdayLabel}>{day}</Text>
+              ))}
+            </View>
+
+            <View style={styles.calendarGrid}>
+              {cells}
+            </View>
+          </View>
+        </ScrollView>
+
+        <Modal
+          visible={showDayDetailModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowDayDetailModal(false)}>
+          <View style={styles.dayModalOverlay}>
+            <View style={styles.dayModalContent}>
+              <View style={styles.dayModalHeader}>
+                <Text style={styles.dayModalTitle}>Attendance Details</Text>
+                <TouchableOpacity onPress={() => setShowDayDetailModal(false)}>
+                  <Text style={styles.dayModalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.dayModalBody} showsVerticalScrollIndicator={false}>
+                <Text style={styles.dayModalDateText}>{selectedDateStr}</Text>
+
+                <View style={styles.dayModalDivider} />
+
+                {selectedDayLogs.length > 0 ? (
+                  <View style={styles.dayDetailsGrid}>
+                    <View style={styles.dayDetailField}>
+                      <Text style={styles.dayDetailLabel}>Check-In Time</Text>
+                      <Text style={styles.dayDetailValue}>{checkInTime}</Text>
+                    </View>
+                    <View style={styles.dayDetailField}>
+                      <Text style={styles.dayDetailLabel}>Check-In Location</Text>
+                      <Text style={styles.dayDetailValueText} numberOfLines={2}>📍 {checkInLocation}</Text>
+                    </View>
+
+                    <View style={styles.dayModalDivider} />
+
+                    <View style={styles.dayDetailField}>
+                      <Text style={styles.dayDetailLabel}>Check-Out Time</Text>
+                      <Text style={styles.dayDetailValue}>{checkOutTime}</Text>
+                    </View>
+                    <View style={styles.dayDetailField}>
+                      <Text style={styles.dayDetailLabel}>Check-Out Location</Text>
+                      <Text style={styles.dayDetailValueText} numberOfLines={2}>📍 {checkOutLocation}</Text>
+                    </View>
+
+                    <View style={styles.dayModalDivider} />
+
+                    <View style={styles.dayDetailField}>
+                      <Text style={styles.dayDetailLabel}>Worked Duration</Text>
+                      <Text style={[styles.dayDetailValue, { color: COLORS.primary, fontWeight: '700' }]}>{workedDuration}</Text>
+                    </View>
+
+                    <View style={styles.dayDetailField}>
+                      <Text style={styles.dayDetailLabel}>Sync Status</Text>
+                      <View style={[styles.badgeSmall, { alignSelf: 'flex-start', marginTop: 4, backgroundColor: isSynced ? '#e6f4ea' : '#fff3e0' }]}>
+                        <Text style={[styles.badgeSmallText, { color: isSynced ? COLORS.success : COLORS.warning }]}>
+                          {isSynced ? 'SYNCED' : 'PENDING'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.dayModalEmpty}>
+                    <Text style={styles.dayModalEmptyText}>Absent / No Records</Text>
+                    <Text style={styles.dayModalEmptySubText}>No check-in or check-out logs were registered on this date.</Text>
+                  </View>
+                )}
+              </ScrollView>
+
+              <TouchableOpacity
+                style={styles.dayModalCloseBtn}
+                onPress={() => setShowDayDetailModal(false)}>
+                <Text style={styles.dayModalCloseBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    );
+  };
 
   const daysList = React.useMemo(() => generateDaysList(), []);
 
@@ -104,6 +435,16 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
       return recordDateStr === selectedDay.dateStr;
     });
   }, [allRecords, selectedDayId, daysList]);
+
+  const totalWorkedTimeMs = React.useMemo(() => {
+    return filteredRecords
+      .filter(r => r.check_type === 'check-out')
+      .reduce((sum, r) => sum + (r.duration || 0), 0);
+  }, [filteredRecords]);
+
+  const formattedTotalWorked = React.useMemo(() => {
+    return formatDuration(totalWorkedTimeMs);
+  }, [totalWorkedTimeMs]);
 
   const dayStats = React.useMemo(() => {
     const checkIns = filteredRecords.filter(r => r.check_type === 'check-in').length;
@@ -118,10 +459,17 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
   const loadQueue = async () => {
     try {
       console.log('Loading sync queue...');
-      const records = await getPendingSyncRecords();
+      let records = await getPendingSyncRecords();
+      let all = await getAllAttendanceRecords(200);
+
+      if (employeeId) {
+        const filterId = String(employeeId).trim().toUpperCase();
+        records = records.filter((r: any) => String(r.employee_id).trim().toUpperCase() === filterId);
+        all = all.filter((r: any) => String(r.employee_id).trim().toUpperCase() === filterId);
+      }
+
       console.log('Pending records:', records);
       setPendingRecords(records);
-      const all = await getAllAttendanceRecords(200);
       console.log('All records:', all);
       setAllRecords(all);
 
@@ -129,6 +477,10 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
       const syncedRecords = all.filter((r: any) => r.synced === 1);
       console.log('Synced records count:', syncedRecords.length);
       setSyncedCount(syncedRecords.length);
+
+      // Load unsynced employees count
+      const pendingEmps = await getPendingSyncEmployees();
+      setPendingEmployeesCount(pendingEmps.length);
     } catch (e) {
       console.log('Error loading sync queue:', e);
     }
@@ -141,21 +493,31 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
     }, []),
   );
 
+
   useEffect(() => {
+    let wasOffline = false;
+
+    // Check initial connectivity once
+    checkInternetConnectivity().then(connected => {
+      setIsOnline(connected);
+      wasOffline = !connected;
+    });
+
     // Subscribe to real-time network state changes
     const unsubscribe = subscribeToConnectivityChanges(connected => {
       setIsOnline(connected);
-      if (connected && pendingRecords.length > 0 && !isSyncing) {
+      
+      const hasPending = pendingRecordsRef.current.length > 0 || pendingEmployeesCountRef.current > 0;
+      
+      if (connected && wasOffline && hasPending && !isSyncingRef.current) {
         // INNOVATION: Automatic background sync on network restoration!
         console.log(
           'Network restored. Initializing automatic synchronization...',
         );
         executeSync(true);
       }
+      wasOffline = !connected;
     });
-
-    // Check initial connectivity
-    checkInternetConnectivity().then(setIsOnline);
 
     return () => {
       if (unsubscribe) {
@@ -163,31 +525,7 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingRecords.length, isSyncing]);
-
-  const uploadAttendanceRecord = async (record: any): Promise<boolean> => {
-    const SYNC_ENDPOINT = ''; // Optional: replace with your real server endpoint
-
-    if (SYNC_ENDPOINT) {
-      try {
-        const response = await fetch(SYNC_ENDPOINT, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(record),
-        });
-
-        return response.ok;
-      } catch (err) {
-        console.error('Remote sync failed:', err);
-        return false;
-      }
-    }
-
-    // No remote endpoint configured: simulate upload success locally.
-    return true;
-  };
+  }, []);
 
   const executeSync = async (_isAuto = false) => {
     const online = await checkInternetConnectivity();
@@ -196,38 +534,102 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
       return;
     }
 
-    if (pendingRecords.length === 0) {
+    if (!HARDCODED_SERVER_URL || !HARDCODED_SERVER_URL.trim().startsWith('http')) {
+      setError('Server URL is not configured. Please update HARDCODED_SERVER_URL in the app.');
       return;
     }
 
     setError('');
     setIsSyncing(true);
-    setSyncProgress(0);
+    setSyncProgress(10);
 
-    let completed = 0;
-    const total = pendingRecords.length;
+    try {
+      const targetUrl = HARDCODED_SERVER_URL.trim().replace(/\/$/, ''); // Remove trailing slash
 
-    for (const record of pendingRecords) {
-      try {
-        const synced = await uploadAttendanceRecord(record);
-        if (!synced) {
-          throw new Error('Upload failed');
+      // 1. Upload Unsynced Employees
+      const pendingEmps = await getPendingSyncEmployees();
+      if (pendingEmps.length > 0) {
+        console.log(`Syncing ${pendingEmps.length} employees to server...`);
+        const response = await fetch(`${targetUrl}/api/sync/employees`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(pendingEmps),
+        });
+
+        if (response.ok) {
+          for (const emp of pendingEmps) {
+            await markEmployeeAsSynced(emp.id);
+          }
+        } else {
+          throw new Error(`Server rejected employee profiles upload: ${response.status}`);
         }
-
-        // Mark as synced in SQLite and remove from sync queue
-        await markRecordAsSynced(record.uuid);
-        completed += 1;
-
-        // Update progress state
-        setSyncProgress(Math.round((completed / total) * 100));
-      } catch (err) {
-        console.error('Record upload failed for UUID:', record.uuid, err);
       }
-    }
+      setSyncProgress(40);
 
-    // Refresh pending queue from database
-    await loadQueue();
-    setIsSyncing(false);
+      // 2. Upload Unsynced Attendance Records
+      const recordsToSync = await getPendingSyncRecords();
+      if (recordsToSync.length > 0) {
+        console.log(`Syncing ${recordsToSync.length} attendance logs to server...`);
+        const response = await fetch(`${targetUrl}/api/sync/attendance`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(recordsToSync),
+        });
+
+        if (response.ok) {
+          for (const record of recordsToSync) {
+            await markRecordAsSynced(record.uuid);
+          }
+        } else {
+          throw new Error(`Server rejected attendance logs upload: ${response.status}`);
+        }
+      }
+      setSyncProgress(65);
+
+      // 3. Pull Master Employees List from Server
+      console.log('Downloading master employee records from server...');
+      const empGetRes = await fetch(`${targetUrl}/api/sync/employees`);
+      if (empGetRes.ok) {
+        const serverEmployees = await empGetRes.json();
+        console.log(`Downloaded ${serverEmployees.length} employee profiles from server.`);
+        for (const emp of serverEmployees) {
+          await insertOrUpdateEmployee({
+            id: emp.id,
+            name: emp.name,
+            department: emp.department,
+            photoPath: emp.photo_path || emp.photoPath,
+            faceVector: emp.faceVector || (emp.face_vector ? (typeof emp.face_vector === 'string' ? JSON.parse(emp.face_vector) : emp.face_vector) : null),
+            createdAt: emp.created_at || emp.createdAt,
+            updatedAt: emp.updated_at || emp.updatedAt,
+          }, 1); // Set synced=1 since they originated from server
+        }
+      }
+      setSyncProgress(85);
+
+      // 4. Pull Master Attendance Logs from Server
+      console.log('Downloading master attendance logs from server...');
+      const attGetRes = await fetch(`${targetUrl}/api/sync/attendance`);
+      if (attGetRes.ok) {
+        const serverAttendance = await attGetRes.json();
+        console.log(`Downloaded ${serverAttendance.length} attendance records from server.`);
+        for (const record of serverAttendance) {
+          await insertSyncedAttendance(record);
+        }
+      }
+      setSyncProgress(100);
+
+    } catch (err: any) {
+      console.error('Two-way synchronization failed:', err);
+      setError(`Sync Failed: ${err?.message || err?.toString() || 'Connection Timeout'}`);
+    } finally {
+      // Refresh pending queue from database
+      await loadQueue();
+      setIsSyncing(false);
+    }
   };
 
   const getLogIndexInfo = (uuid: string, employeeId: string) => {
@@ -251,6 +653,12 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
   const renderQueueItem = ({item}: {item: any}) => {
     const {index, total} = getLogIndexInfo(item.uuid, item.employee_id);
     const isCheckIn = item.check_type === 'check-in';
+    const dateStr = formatDateOnly(item.timestamp);
+    const inTimeStr = isCheckIn ? formatTimeOnly(item.timestamp) : formatTimeOnly(item.timestamp - (item.duration || 0));
+    const outTimeStr = isCheckIn ? null : formatTimeOnly(item.timestamp);
+    const workedStr = isCheckIn ? null : formatDuration(item.duration);
+    const siteName = item.site_name || 'Outside Geofence / Unknown';
+    const coords = item.location || '';
 
     return (
       <TouchableOpacity
@@ -259,66 +667,87 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
           setSelectedRecord(item);
           setShowDetailModal(true);
         }}>
-        <View
-          style={[
-            styles.recordBadge,
-            !isCheckIn && {backgroundColor: 'rgba(156, 39, 176, 0.1)'},
-          ]}>
-          <Text
-            style={[styles.recordBadgeText, !isCheckIn && {color: '#9c27b0'}]}>
-            {isCheckIn ? 'CHECK-IN' : 'CHECK-OUT'}
-          </Text>
-        </View>
-        <View style={styles.recordDetails}>
+        <View style={styles.cardHeaderRow}>
+          <View
+            style={[
+              styles.recordBadge,
+              !isCheckIn && {backgroundColor: 'rgba(156, 39, 176, 0.1)'},
+            ]}>
+            <Text
+              style={[styles.recordBadgeText, !isCheckIn && {color: '#9c27b0'}]}>
+              {isCheckIn ? 'CHECK-IN' : 'CHECK-OUT'}
+            </Text>
+          </View>
           <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
             <Text style={styles.recordIdText}>ID: {item.employee_id}</Text>
             {total > 1 && (
-              <View
-                style={{
-                  backgroundColor: '#ffe8d6',
-                  borderRadius: 4,
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
-                  borderWidth: 0.5,
-                  borderColor: '#dd8b55',
-                }}>
-                <Text
-                  style={{
-                    fontSize: 9,
-                    fontWeight: '800',
-                    color: '#b85c1c',
-                  }}>
+              <View style={styles.logIndexBadge}>
+                <Text style={styles.logIndexBadgeText}>
                   Log {index} of {total}
                 </Text>
               </View>
             )}
           </View>
-          <Text style={styles.recordTimeText}>
-            {formatTimestamp(item.timestamp)}
-          </Text>
-          <Text style={styles.recordLocText} numberOfLines={1}>
-            📍 {item.location || 'Location not available'}
-          </Text>
-        </View>
-        {item.synced === 1 ? (
-          <View
-            style={[
-              styles.recordStatusBadge,
-              {backgroundColor: 'rgba(76, 175, 80, 0.1)'},
-            ]}>
+          {item.synced === 1 ? (
             <View
-              style={[styles.pendingDot, {backgroundColor: COLORS.success}]}
-            />
-            <Text style={[styles.pendingBadgeText, {color: COLORS.success}]}>
-              SYNCED
-            </Text>
+              style={[
+                styles.recordStatusBadge,
+                {backgroundColor: 'rgba(76, 175, 80, 0.1)'},
+              ]}>
+              <View
+                style={[styles.pendingDot, {backgroundColor: COLORS.success}]}
+              />
+              <Text style={[styles.pendingBadgeText, {color: COLORS.success}]}>
+                SYNCED
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.recordStatusBadge}>
+              <View style={styles.pendingDot} />
+              <Text style={styles.pendingBadgeText}>PENDING</Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.cardDivider} />
+
+        <View style={styles.cardBody}>
+          <Text style={styles.cardLocText} numberOfLines={1}>
+            📍 {siteName} {coords ? <Text style={styles.cardCoordsText}>({coords})</Text> : null}
+          </Text>
+
+          <View style={styles.timesContainer}>
+            <View style={styles.timeBlock}>
+              <Text style={styles.timeBlockLabel}>Date</Text>
+              <Text style={styles.timeBlockVal}>{dateStr}</Text>
+            </View>
+            <View style={styles.timeBlock}>
+              <Text style={styles.timeBlockLabel}>In Time</Text>
+              <Text style={styles.timeBlockVal}>{inTimeStr}</Text>
+            </View>
+            {!isCheckIn ? (
+              <>
+                <View style={styles.timeBlock}>
+                  <Text style={styles.timeBlockLabel}>Out Time</Text>
+                  <Text style={styles.timeBlockVal}>{outTimeStr}</Text>
+                </View>
+                <View style={styles.timeBlock}>
+                  <Text style={styles.timeBlockLabel}>Worked</Text>
+                  <Text style={[styles.timeBlockVal, {fontWeight: '700', color: COLORS.primary}]}>
+                    {workedStr}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <View style={[styles.timeBlock, {flex: 1.5}]}>
+                <Text style={styles.timeBlockLabel}>Status</Text>
+                <Text style={[styles.timeBlockVal, {color: COLORS.secondary, fontWeight: '700'}]}>
+                  Active Session
+                </Text>
+              </View>
+            )}
           </View>
-        ) : (
-          <View style={styles.recordStatusBadge}>
-            <View style={styles.pendingDot} />
-            <Text style={styles.pendingBadgeText}>PENDING</Text>
-          </View>
-        )}
+        </View>
       </TouchableOpacity>
     );
   };
@@ -521,13 +950,28 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
     );
   };
 
+  if (employeeId) {
+    return renderEmployeeAttendanceView();
+  }
+
   return (
     <SafeAreaView style={[styles.container, globalStyles.container]}>
-      {/* Header */}
+      {/* Header with Back Button */}
       <View style={styles.header}>
-        <Text style={styles.title}>{STRINGS.sync.title}</Text>
-        <Text style={styles.subtitle}>Datalake 3.0 Secure Sync & Purge</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity
+            style={styles.backArrowBtn}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.7}>
+            <Text style={styles.backArrowText}>←</Text>
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>My Attendance</Text>
+            <Text style={styles.subtitle}>Local logs and database synchronization</Text>
+          </View>
+        </View>
       </View>
+
 
       {/* Network Connectivity Banner */}
       <View
@@ -590,23 +1034,27 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
           style={styles.statsScrollContainer}
           contentContainerStyle={styles.statsScrollContent}>
           
-          {/* Card 1: Check-ins */}
-          <View style={styles.statusCardHorizontal}>
-            <Text style={styles.cardLabel}>Total Check-ins</Text>
-            <Text style={[styles.cardVal, {color: COLORS.primary}]}>{dayStats.checkIns}</Text>
-          </View>
-          
-          {/* Card 2: Check-outs */}
-          <View style={[styles.statusCardHorizontal, {backgroundColor: 'rgba(156, 39, 176, 0.05)'}]}>
-            <Text style={styles.cardLabel}>Total Check-outs</Text>
-            <Text style={[styles.cardVal, {color: '#9c27b0'}]}>{dayStats.checkOuts}</Text>
-          </View>
+          {!employeeId && (
+            <>
+              {/* Card 1: Check-ins */}
+              <View style={styles.statusCardHorizontal}>
+                <Text style={styles.cardLabel}>Total Check-ins</Text>
+                <Text style={[styles.cardVal, {color: COLORS.primary}]}>{dayStats.checkIns}</Text>
+              </View>
+              
+              {/* Card 2: Check-outs */}
+              <View style={[styles.statusCardHorizontal, {backgroundColor: 'rgba(156, 39, 176, 0.05)'}]}>
+                <Text style={styles.cardLabel}>Total Check-outs</Text>
+                <Text style={[styles.cardVal, {color: '#9c27b0'}]}>{dayStats.checkOuts}</Text>
+              </View>
 
-          {/* Card 3: Unique IDs */}
-          <View style={[styles.statusCardHorizontal, {backgroundColor: 'rgba(0, 150, 136, 0.05)'}]}>
-            <Text style={styles.cardLabel}>Total Unique IDs</Text>
-            <Text style={[styles.cardVal, {color: '#009688'}]}>{dayStats.uniqueIds}</Text>
-          </View>
+              {/* Card 3: Unique IDs */}
+              <View style={[styles.statusCardHorizontal, {backgroundColor: 'rgba(0, 150, 136, 0.05)'}]}>
+                <Text style={styles.cardLabel}>Total Unique IDs</Text>
+                <Text style={[styles.cardVal, {color: '#009688'}]}>{dayStats.uniqueIds}</Text>
+              </View>
+            </>
+          )}
 
           {/* Card 4: Synced */}
           <View style={[styles.statusCardHorizontal, {backgroundColor: '#e6f4ea'}]}>
@@ -623,6 +1071,16 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation}) => {
               {dayStats.pending}
             </Text>
           </View>
+
+          {employeeId && (
+            /* Card 6: Total Worked Time */
+            <View style={[styles.statusCardHorizontal, {backgroundColor: 'rgba(30, 58, 138, 0.05)', width: 140}]}>
+              <Text style={styles.cardLabel}>Total Worked</Text>
+              <Text style={[styles.cardVal, {color: COLORS.primary}]}>
+                {formattedTotalWorked}
+              </Text>
+            </View>
+          )}
           
         </ScrollView>
       </View>
@@ -830,14 +1288,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: SIZES.md,
     paddingVertical: SIZES.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'column',
     elevation: 3,
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   recordBadge: {
     backgroundColor: 'rgba(30, 58, 138, 0.08)',
@@ -851,24 +1312,67 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.5,
   },
-  recordDetails: {
-    flex: 1,
-    marginHorizontal: SIZES.md,
-  },
   recordIdText: {
     fontSize: SIZES.sm,
     fontWeight: '700',
     color: COLORS.text,
   },
-  recordTimeText: {
-    fontSize: 10,
-    color: COLORS.textSecondary,
-    marginVertical: 1,
+  logIndexBadge: {
+    backgroundColor: '#ffe8d6',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 0.5,
+    borderColor: '#dd8b55',
   },
-  recordLocText: {
+  logIndexBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#b85c1c',
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginVertical: 8,
+  },
+  cardBody: {
+    flexDirection: 'column',
+  },
+  cardLocText: {
+    fontSize: 11,
+    color: COLORS.text,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  cardCoordsText: {
+    fontSize: 9,
+    color: COLORS.textSecondary,
+    fontWeight: '400',
+  },
+  timesContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  timeBlock: {
+    flex: 1,
+    minWidth: 70,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  timeBlockLabel: {
+    fontSize: 9,
+    color: COLORS.textSecondary,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  timeBlockVal: {
     fontSize: 10,
-    color: COLORS.textTertiary,
-    fontStyle: 'italic',
+    color: COLORS.text,
+    fontWeight: '500',
   },
   recordStatusBadge: {
     flexDirection: 'row',
@@ -1118,6 +1622,343 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.04,
     shadowRadius: 3,
+  },
+  // Sync Server URL Settings Panel Styles
+  // Back Button Styles
+  backArrowBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.white,
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backArrowText: {
+    fontSize: 20,
+    color: '#1e3a8a',
+    fontWeight: 'bold',
+  },
+  configPanel: {
+    backgroundColor: COLORS.white,
+    marginHorizontal: SIZES.lg,
+    marginBottom: SIZES.md,
+    padding: SIZES.md,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 2,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+  },
+  configLabel: {
+    fontSize: SIZES.sm,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: SIZES.xs,
+  },
+  configInputRow: {
+    flexDirection: 'row',
+    gap: SIZES.sm,
+    alignItems: 'center',
+  },
+  configInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingHorizontal: SIZES.md,
+    paddingVertical: SIZES.xs,
+    fontSize: SIZES.sm,
+    color: COLORS.text,
+    backgroundColor: '#f8fafc',
+    minHeight: 38,
+  },
+  syncNowBtn: {
+    backgroundColor: '#1e3a8a',
+    borderRadius: 8,
+    paddingHorizontal: SIZES.md,
+    paddingVertical: SIZES.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 38,
+  },
+  syncNowBtnText: {
+    color: COLORS.white,
+    fontSize: SIZES.sm,
+    fontWeight: '600',
+  },
+  configHint: {
+    fontSize: SIZES.xs + 1,
+    color: COLORS.textSecondary,
+    marginTop: SIZES.xs,
+    fontStyle: 'italic',
+  },
+  metricsContainer: {
+    flexDirection: 'row',
+    marginHorizontal: SIZES.lg,
+    marginTop: SIZES.md,
+    marginBottom: SIZES.sm,
+    gap: SIZES.md,
+  },
+  metricCard: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    paddingVertical: SIZES.md,
+    paddingHorizontal: SIZES.sm,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 3,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  metricTitle: {
+    fontSize: 10,
+    color: COLORS.textSecondary,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+  metricUnit: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  calendarContainer: {
+    backgroundColor: COLORS.white,
+    marginHorizontal: SIZES.lg,
+    marginVertical: SIZES.sm,
+    padding: SIZES.md,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    elevation: 3,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SIZES.md,
+  },
+  monthLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  monthNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  monthNavBtnText: {
+    fontSize: 12,
+    color: COLORS.text,
+  },
+  weekdaysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    paddingBottom: 8,
+    marginBottom: 8,
+  },
+  weekdayLabel: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textTertiary,
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarDayCell: {
+    width: '14.28%',
+    height: 48,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+    marginVertical: 2,
+    position: 'relative',
+  },
+  calendarDayCellEmpty: {
+    width: '14.28%',
+    height: 48,
+  },
+  calendarDayCellToday: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  calendarDayCellSelected: {
+    backgroundColor: 'rgba(30, 58, 138, 0.1)',
+    borderWidth: 1.5,
+    borderColor: '#1e3a8a',
+  },
+  calendarDayText: {
+    fontSize: 13,
+    color: COLORS.text,
+    fontWeight: '600',
+  },
+  calendarDayTextToday: {
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  calendarDayTextSelected: {
+    color: '#1e3a8a',
+    fontWeight: '700',
+  },
+  calendarDayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    position: 'absolute',
+    bottom: 6,
+  },
+  calendarLegend: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: SIZES.md,
+    paddingTop: SIZES.md,
+    borderTopWidth: 1,
+    borderTopColor: '#f1f5f9',
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  legendText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  dayModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SIZES.xl,
+  },
+  dayModalContent: {
+    width: '100%',
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: SIZES.lg,
+    maxHeight: '85%',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  dayModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SIZES.md,
+  },
+  dayModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  dayModalCloseText: {
+    fontSize: 20,
+    color: COLORS.textSecondary,
+    padding: 4,
+  },
+  dayModalBody: {
+    marginVertical: SIZES.sm,
+  },
+  dayModalDateText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginBottom: SIZES.sm,
+  },
+  dayModalDivider: {
+    height: 1,
+    backgroundColor: '#f1f5f9',
+    marginVertical: 12,
+  },
+  dayDetailsGrid: {
+    gap: 8,
+  },
+  dayDetailField: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+  },
+  dayDetailLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textTertiary,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  dayDetailValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  dayDetailValueText: {
+    fontSize: 12,
+    color: COLORS.textSecondary,
+    lineHeight: 18,
+  },
+  dayModalEmpty: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  dayModalEmptyText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.textSecondary,
+    marginBottom: 4,
+  },
+  dayModalEmptySubText: {
+    fontSize: 11,
+    color: COLORS.textTertiary,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
+  dayModalCloseBtn: {
+    backgroundColor: '#1e3a8a',
+    paddingVertical: SIZES.md,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: SIZES.md,
+    minHeight: SIZES.buttonHeight,
+  },
+  dayModalCloseBtnText: {
+    color: COLORS.white,
+    fontSize: SIZES.lg,
+    fontWeight: '600',
   },
 });
 
