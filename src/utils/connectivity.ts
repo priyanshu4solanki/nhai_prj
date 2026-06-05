@@ -11,7 +11,7 @@ export const checkInternetConnectivity = async (): Promise<boolean> => {
 };
 
 export const subscribeToConnectivityChanges = (
-  callback: (isConnected: boolean) => void
+  callback: (isConnected: boolean) => void,
 ) => {
   const unsubscribe = NetInfo.addEventListener(state => {
     callback(state.isConnected ?? false);

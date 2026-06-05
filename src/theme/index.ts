@@ -1,7 +1,7 @@
-import { StyleSheet, Dimensions } from 'react-native';
-import { COLORS, SIZES } from '../constants';
+import {StyleSheet, Dimensions} from 'react-native';
+import {COLORS, SIZES} from '../constants';
 
-const { width, height } = Dimensions.get('window');
+const {width, height} = Dimensions.get('window');
 
 export const theme = {
   colors: COLORS,
@@ -89,21 +89,21 @@ export const globalStyles = StyleSheet.create({
   // Shadow styles
   shadowSmall: {
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.06,
     shadowRadius: 2,
     elevation: 2,
   },
   shadowMedium: {
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 4,
   },
   shadowLarge: {
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: {width: 0, height: 8},
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 8,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import {
   View,
   Text,
@@ -8,26 +8,35 @@ import {
   Dimensions,
   Animated,
 } from 'react-native';
-import { RNCamera } from 'react-native-camera';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import {RNCamera} from 'react-native-camera';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {useTranslation} from 'react-i18next';
 
-import { RootStackParamList } from '../types';
-import { COLORS, SIZES, STRINGS } from '../constants';
-import { globalStyles } from '../theme';
+import {RootStackParamList} from '../types';
+import {COLORS, SIZES} from '../constants';
 
-type LivenessScreenProps = NativeStackScreenProps<RootStackParamList, 'Liveness'>;
+type LivenessScreenProps = NativeStackScreenProps<
+  RootStackParamList,
+  'Liveness'
+>;
 
-type BlinkState = 'waiting_open' | 'eyes_open' | 'eyes_closed' | 'waiting_smile' | 'blink_confirmed';
+type BlinkState =
+  | 'waiting_open'
+  | 'eyes_open'
+  | 'eyes_closed'
+  | 'waiting_smile'
+  | 'blink_confirmed';
 
-const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) => {
-  const { employeeId, department, faceVector } = route.params;
+const LivenessScreen: React.FC<LivenessScreenProps> = ({navigation, route}) => {
+  const {employeeId, department, faceVector} = route.params;
+  const {t} = useTranslation();
 
   const [blinkState, setBlinkState] = useState<BlinkState>('waiting_open');
   const fallbackTimerRef = useRef<NodeJS.Timeout | null>(null);
   // Tracks auto-advance when device doesn't support ML Kit eye classification
   const classificationFallbackRef = useRef<NodeJS.Timeout | null>(null);
   const classificationWorkingRef = useRef(false);
-  const [instruction, setInstruction] = useState('Please look at the camera...');
+  const [instruction, setInstruction] = useState(t('liveness.detecting'));
   const [progressWidth] = useState(new Animated.Value(0));
   const [successScale] = useState(new Animated.Value(0.5));
   const [successOpacity] = useState(new Animated.Value(0));
@@ -35,10 +44,18 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
   useEffect(() => {
     // Animate progress bar according to state transitions
     let targetValue = 0;
-    if (blinkState === 'eyes_open') targetValue = 0.25;
-    if (blinkState === 'eyes_closed') targetValue = 0.5;
-    if (blinkState === 'waiting_smile') targetValue = 0.75;
-    if (blinkState === 'blink_confirmed') targetValue = 1;
+    if (blinkState === 'eyes_open') {
+      targetValue = 0.25;
+    }
+    if (blinkState === 'eyes_closed') {
+      targetValue = 0.5;
+    }
+    if (blinkState === 'waiting_smile') {
+      targetValue = 0.75;
+    }
+    if (blinkState === 'blink_confirmed') {
+      targetValue = 1;
+    }
 
     Animated.timing(progressWidth, {
       toValue: targetValue,
@@ -54,7 +71,7 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
         clearTimeout(fallbackTimerRef.current);
         fallbackTimerRef.current = null;
       }
-      setInstruction(STRINGS.liveness.livenessConfirmed);
+      setInstruction(t('liveness.livenessConfirmed'));
       Animated.parallel([
         Animated.spring(successScale, {
           toValue: 1,
@@ -70,12 +87,18 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
       ]).start();
 
       navTimer = setTimeout(() => {
-        navigation.navigate('Recognition', { employeeId, department, faceVector });
+        navigation.navigate('Recognition', {
+          employeeId,
+          department,
+          faceVector,
+        });
       }, 1500);
     }
 
     return () => {
-      if (navTimer) clearTimeout(navTimer);
+      if (navTimer) {
+        clearTimeout(navTimer);
+      }
       if (fallbackTimerRef.current) {
         clearTimeout(fallbackTimerRef.current);
         fallbackTimerRef.current = null;
@@ -85,18 +108,30 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
         classificationFallbackRef.current = null;
       }
     };
-  }, [blinkState]);
+  }, [
+    blinkState,
+    department,
+    employeeId,
+    faceVector,
+    navigation,
+    progressWidth,
+    successOpacity,
+    successScale,
+    t,
+  ]);
 
-  const handleFacesDetected = ({ faces }: { faces: any[] }) => {
-    if (blinkState === 'blink_confirmed') return;
+  const handleFacesDetected = ({faces}: {faces: any[]}) => {
+    if (blinkState === 'blink_confirmed') {
+      return;
+    }
 
     if (faces.length === 0) {
-      setInstruction('No face detected. Look directly into camera.');
+      setInstruction(t('faceAuth.faceNotDetected'));
       return;
     }
 
     if (faces.length > 1) {
-      setInstruction(STRINGS.faceAuth.multiplesFaces);
+      setInstruction(t('faceAuth.multiplesFaces'));
       return;
     }
 
@@ -107,18 +142,24 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
     const rightEyeProb = face.rightEyeOpenProbability;
 
     // Verify probabilities are returned by the native ML Kit
-    if (typeof leftEyeProb === 'undefined' || typeof rightEyeProb === 'undefined') {
+    if (
+      typeof leftEyeProb === 'undefined' ||
+      typeof rightEyeProb === 'undefined'
+    ) {
       // Classification data unavailable on this device/lighting
       // Start a fallback auto-advance timer if not already running
-      if (!classificationWorkingRef.current && !classificationFallbackRef.current) {
-        setInstruction('Hold still... verifying liveness automatically');
+      if (
+        !classificationWorkingRef.current &&
+        !classificationFallbackRef.current
+      ) {
+        setInstruction(t('liveness.brighterLight'));
         classificationFallbackRef.current = setTimeout(() => {
           // Auto-advance through all states with realistic delays
           setBlinkState('eyes_open');
-          setInstruction('Excellent. Now blink your eyes slowly...');
+          setInstruction(t('liveness.excellentBlink'));
           setTimeout(() => {
             setBlinkState('eyes_closed');
-            setInstruction('Perfect! Now open your eyes...');
+            setInstruction(t('liveness.eyesClosed'));
             setTimeout(() => {
               setBlinkState('waiting_smile');
               setInstruction('Blink confirmed! Now smile for the camera! 😊');
@@ -152,18 +193,18 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
       case 'waiting_open':
         if (avgEyeOpenProb >= 0.7) {
           setBlinkState('eyes_open');
-          setInstruction('Excellent. Now blink your eyes slowly...');
+          setInstruction(t('liveness.excellentBlink'));
         } else {
-          setInstruction('Open your eyes wide to start...');
+          setInstruction(t('liveness.openEyesWide'));
         }
         break;
 
       case 'eyes_open':
         if (avgEyeOpenProb <= 0.25) {
           setBlinkState('eyes_closed');
-          setInstruction('Perfect! Now open your eyes...');
+          setInstruction(t('liveness.eyesClosed'));
         } else {
-          setInstruction('Blink slowly once...');
+          setInstruction(t('liveness.blinkSlowly'));
         }
         break;
 
@@ -172,7 +213,7 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
           setBlinkState('waiting_smile');
           setInstruction('Blink confirmed! Now smile for the camera! 😊');
         } else {
-          setInstruction('Open your eyes...');
+          setInstruction(t('liveness.openingEyes'));
         }
         break;
 
@@ -207,8 +248,8 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
     <SafeAreaView style={styles.container}>
       {/* Top Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{STRINGS.liveness.title}</Text>
-        <Text style={styles.headerSubtitle}>{STRINGS.liveness.subtitle}</Text>
+        <Text style={styles.headerTitle}>{t('liveness.title')}</Text>
+        <Text style={styles.headerSubtitle}>{t('liveness.subtitle')}</Text>
       </View>
 
       {/* Main Camera Area */}
@@ -218,9 +259,10 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
           type={RNCamera.Constants.Type.front}
           flashMode={RNCamera.Constants.FlashMode.off}
           captureAudio={false}
-          faceDetectorEnabled={true}
           faceDetectionMode={RNCamera.Constants.FaceDetection.Mode.accurate}
-          faceDetectionClassifications={RNCamera.Constants.FaceDetection.Classifications.all}
+          faceDetectionClassifications={
+            RNCamera.Constants.FaceDetection.Classifications.all
+          }
           onFacesDetected={handleFacesDetected}
         />
 
@@ -231,29 +273,35 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
               <Text
                 style={[
                   styles.stepLabel,
-                  blinkState !== 'waiting_open' && { color: COLORS.success, fontWeight: '700' },
-                ]}>
-                1. Face Aligned
-              </Text>
-              <Text
-                style={[
-                  styles.stepLabel,
-                  (blinkState === 'eyes_closed' || blinkState === 'waiting_smile' || blinkState === 'blink_confirmed') && {
+                  blinkState !== 'waiting_open' && {
                     color: COLORS.success,
                     fontWeight: '700',
                   },
                 ]}>
-                2. Blink Eyes
+                {t('liveness.step1', '1. Face Aligned')}
               </Text>
               <Text
                 style={[
                   styles.stepLabel,
-                  (blinkState === 'waiting_smile' || blinkState === 'blink_confirmed') && {
+                  (blinkState === 'eyes_closed' ||
+                    blinkState === 'waiting_smile' ||
+                    blinkState === 'blink_confirmed') && {
                     color: COLORS.success,
                     fontWeight: '700',
                   },
                 ]}>
-                3. Smile 😊
+                {t('liveness.step2', '2. Blink Eyes')}
+              </Text>
+              <Text
+                style={[
+                  styles.stepLabel,
+                  (blinkState === 'waiting_smile' ||
+                    blinkState === 'blink_confirmed') && {
+                    color: COLORS.success,
+                    fontWeight: '700',
+                  },
+                ]}>
+                {t('liveness.step3', '3. Smile 😊')}
               </Text>
             </View>
             <View style={styles.progressContainer}>
@@ -266,7 +314,9 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
                       outputRange: ['0%', '100%'],
                     }),
                     backgroundColor:
-                      blinkState === 'blink_confirmed' ? COLORS.success : COLORS.secondary,
+                      blinkState === 'blink_confirmed'
+                        ? COLORS.success
+                        : COLORS.secondary,
                   },
                 ]}
               />
@@ -281,14 +331,18 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
               styles.successPanel,
               {
                 opacity: successOpacity,
-                transform: [{ scale: successScale }],
+                transform: [{scale: successScale}],
               },
             ]}>
             <View style={styles.checkmarkIcon}>
               <Text style={styles.checkmarkText}>✓</Text>
             </View>
-            <Text style={styles.panelTitle}>Anti-Spoofing Verified</Text>
-            <Text style={styles.panelSubtitle}>Liveness check completed successfully.</Text>
+            <Text style={styles.panelTitle}>
+              {t('liveness.antiSpoofingVerified')}
+            </Text>
+            <Text style={styles.panelSubtitle}>
+              {t('liveness.checkCompleted')}
+            </Text>
           </Animated.View>
         )}
       </View>
@@ -316,14 +370,16 @@ const LivenessScreen: React.FC<LivenessScreenProps> = ({ navigation, route }) =>
         <TouchableOpacity
           style={styles.cancelButton}
           onPress={() => navigation.navigate('Login')}>
-          <Text style={styles.cancelButtonText}>Cancel Verification</Text>
+          <Text style={styles.cancelButtonText}>
+            {t('liveness.cancelVerification')}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 };
 
-const { width, height } = Dimensions.get('window');
+const {width, height} = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
@@ -401,7 +457,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 8,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
@@ -442,7 +498,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 5,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.2,
     shadowRadius: 4,
   },

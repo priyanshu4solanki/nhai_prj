@@ -5,18 +5,18 @@ import {
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
-  ActivityIndicator,
   FlatList,
   Modal,
   ScrollView,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {useTranslation} from 'react-i18next';
 
 const HARDCODED_SERVER_URL = 'http://localhost:3000';
 
 import {RootStackParamList} from '../types';
-import {COLORS, SIZES, STRINGS} from '../constants';
+import {COLORS, SIZES} from '../constants';
 import {globalStyles} from '../theme';
 import {
   getPendingSyncRecords,
@@ -36,16 +36,24 @@ import {
 type SyncScreenProps = NativeStackScreenProps<RootStackParamList, 'Sync'>;
 
 const formatDuration = (ms: number) => {
-  if (!ms || ms <= 0) return '0s';
+  if (!ms || ms <= 0) {
+    return '0s';
+  }
   const totalSec = Math.floor(ms / 1000);
   const hours = Math.floor(totalSec / 3600);
   const minutes = Math.floor((totalSec % 3600) / 60);
   const seconds = totalSec % 60;
-  
+
   const parts = [];
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0) parts.push(`${minutes}m`);
-  if (seconds > 0 || parts.length === 0) parts.push(`${seconds}s`);
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
+  if (seconds > 0 || parts.length === 0) {
+    parts.push(`${seconds}s`);
+  }
   return parts.join(' ');
 };
 
@@ -71,14 +79,14 @@ const formatDateOnly = (ts: number): string => {
 const generateDaysList = () => {
   const list = [];
   const today = new Date();
-  
+
   // Day 0: Today
   list.push({
     id: 'day_0',
     label: 'Today',
     dateStr: today.toDateString(),
   });
-  
+
   // Day 1: Yesterday
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -87,14 +95,14 @@ const generateDaysList = () => {
     label: 'Yesterday',
     dateStr: yesterday.toDateString(),
   });
-  
+
   // Days 2 to 6: older dates
   for (let i = 2; i < 7; i++) {
     const date = new Date();
     date.setDate(today.getDate() - i);
     const label = date.toLocaleDateString('en-US', {
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
     });
     list.push({
       id: `day_${i}`,
@@ -102,18 +110,18 @@ const generateDaysList = () => {
       dateStr: date.toDateString(),
     });
   }
-  
+
   return list;
 };
 
 const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
+  const {t} = useTranslation();
   const employeeId = route.params?.employeeId;
   const [pendingRecords, setPendingRecords] = useState<any[]>([]);
   const [allRecords, setAllRecords] = useState<any[]>([]);
   const [isOnline, setIsOnline] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
-  const [syncedCount, setSyncedCount] = useState(0);
   const [error, setError] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -136,13 +144,28 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
   const todayDateObj = new Date();
   const [calendarMonth, setCalendarMonth] = useState(todayDateObj.getMonth());
   const [calendarYear, setCalendarYear] = useState(todayDateObj.getFullYear());
-  const [selectedCalendarDay, setSelectedCalendarDay] = useState<number | null>(null);
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<number | null>(
+    null,
+  );
   const [showDayDetailModal, setShowDayDetailModal] = useState(false);
 
-  const MONTH_NAMES = React.useMemo(() => [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ], []);
+  const MONTH_NAMES = React.useMemo(
+    () => [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ],
+    [],
+  );
 
   const monthRecords = React.useMemo(() => {
     return allRecords.filter(r => {
@@ -152,7 +175,7 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
   }, [allRecords, calendarMonth, calendarYear]);
 
   const daysWithLogs = React.useMemo(() => {
-    const map: { [day: number]: any[] } = {};
+    const map: {[day: number]: any[]} = {};
     monthRecords.forEach(r => {
       const day = new Date(r.timestamp).getDate();
       if (!map[day]) {
@@ -162,37 +185,6 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
     });
     return map;
   }, [monthRecords]);
-
-  const calendarStats = React.useMemo(() => {
-    let fullDays = 0;
-    let totalDurationMs = 0;
-    let activeDays = 0;
-
-    Object.keys(daysWithLogs).forEach(dayStr => {
-      const day = parseInt(dayStr, 10);
-      const logs = daysWithLogs[day];
-      const hasIn = logs.some(r => r.check_type === 'check-in');
-      const hasOut = logs.some(r => r.check_type === 'check-out');
-      if (hasIn || hasOut) {
-        activeDays++;
-      }
-      if (hasIn && hasOut) {
-        fullDays++;
-      }
-      logs.filter(r => r.check_type === 'check-out').forEach(r => {
-        totalDurationMs += (r.duration || 0);
-      });
-    });
-
-    const totalHours = totalDurationMs / (1000 * 60 * 60);
-    const avgHours = activeDays > 0 ? totalHours / activeDays : 0;
-
-    return {
-      fullDays,
-      totalHours: totalHours.toFixed(1),
-      avgHours: avgHours.toFixed(1),
-    };
-  }, [daysWithLogs]);
 
   const handlePrevMonth = () => {
     if (calendarMonth === 0) {
@@ -217,45 +209,45 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
   const renderEmployeeAttendanceView = () => {
     const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate();
     const firstDayIndex = new Date(calendarYear, calendarMonth, 1).getDay();
-    
+
     const cells = [];
     for (let i = 0; i < firstDayIndex; i++) {
-      cells.push(<View key={`empty-${i}`} style={styles.calendarDayCellEmpty} />);
+      cells.push(
+        <View key={`empty-${i}`} style={styles.calendarDayCellEmpty} />,
+      );
     }
-    
+
     const todayDate = new Date();
-    const isCurrentMonth = todayDate.getMonth() === calendarMonth && todayDate.getFullYear() === calendarYear;
+    const isCurrentMonth =
+      todayDate.getMonth() === calendarMonth &&
+      todayDate.getFullYear() === calendarYear;
     const todayDay = todayDate.getDate();
-    
+
     for (let d = 1; d <= daysInMonth; d++) {
       const logs = daysWithLogs[d] || [];
       const hasCheckIn = logs.some(r => r.check_type === 'check-in');
       const hasCheckOut = logs.some(r => r.check_type === 'check-out');
-      
+
       let dotColor = null;
-      let status = 'none';
-      
+
       const cellDate = new Date(calendarYear, calendarMonth, d);
       cellDate.setHours(0, 0, 0, 0);
       const todayCompare = new Date(todayDate);
       todayCompare.setHours(0, 0, 0, 0);
-      
+
       if (logs.length > 0) {
         if (hasCheckIn && hasCheckOut) {
-          status = 'full';
           dotColor = COLORS.success;
         } else {
-          status = 'partial';
           dotColor = '#ffb300';
         }
       } else if (cellDate < todayCompare) {
-        status = 'absent';
         dotColor = COLORS.error;
       }
-      
+
       const isToday = isCurrentMonth && d === todayDay;
       const isSelected = selectedCalendarDay === d;
-      
+
       cells.push(
         <TouchableOpacity
           key={`day-${d}`}
@@ -268,82 +260,115 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
             setSelectedCalendarDay(d);
             setShowDayDetailModal(true);
           }}>
-          <Text style={[
-            styles.calendarDayText,
-            isToday && styles.calendarDayTextToday,
-            isSelected && styles.calendarDayTextSelected,
-          ]}>
+          <Text
+            style={[
+              styles.calendarDayText,
+              isToday && styles.calendarDayTextToday,
+              isSelected && styles.calendarDayTextSelected,
+            ]}>
             {d}
           </Text>
           {dotColor && (
-            <View style={[styles.calendarDayDot, { backgroundColor: dotColor }]} />
+            <View
+              style={[styles.calendarDayDot, {backgroundColor: dotColor}]}
+            />
           )}
-        </TouchableOpacity>
+        </TouchableOpacity>,
       );
     }
 
-    const selectedDayLogs = selectedCalendarDay ? (daysWithLogs[selectedCalendarDay] || []) : [];
-    const checkInRecord = selectedDayLogs.find(r => r.check_type === 'check-in');
-    const checkOutRecord = selectedDayLogs.find(r => r.check_type === 'check-out');
+    const selectedDayLogs = selectedCalendarDay
+      ? daysWithLogs[selectedCalendarDay] || []
+      : [];
+    const checkInRecord = selectedDayLogs.find(
+      r => r.check_type === 'check-in',
+    );
+    const checkOutRecord = selectedDayLogs.find(
+      r => r.check_type === 'check-out',
+    );
 
-    const checkInTime = checkInRecord ? formatTimeOnly(checkInRecord.timestamp) : 'Not Logged';
-    const checkOutTime = checkOutRecord ? formatTimeOnly(checkOutRecord.timestamp) : (checkInRecord ? 'Active Session' : 'Not Logged');
-    const workedDuration = (checkInRecord && checkOutRecord)
-      ? formatDuration(checkOutRecord.timestamp - checkInRecord.timestamp)
-      : '--';
-    const checkInLocation = checkInRecord ? (checkInRecord.site_name || checkInRecord.location || 'N/A') : 'N/A';
-    const checkOutLocation = checkOutRecord ? (checkOutRecord.site_name || checkOutRecord.location || 'N/A') : 'N/A';
-    const isSynced = selectedDayLogs.length > 0 && selectedDayLogs.every(r => r.synced === 1);
+    const checkInTime = checkInRecord
+      ? formatTimeOnly(checkInRecord.timestamp)
+      : 'Not Logged';
+    const checkOutTime = checkOutRecord
+      ? formatTimeOnly(checkOutRecord.timestamp)
+      : checkInRecord
+      ? 'Active Session'
+      : 'Not Logged';
+    const workedDuration =
+      checkInRecord && checkOutRecord
+        ? formatDuration(checkOutRecord.timestamp - checkInRecord.timestamp)
+        : '--';
+    const checkInLocation = checkInRecord
+      ? checkInRecord.site_name || checkInRecord.location || 'N/A'
+      : 'N/A';
+    const checkOutLocation = checkOutRecord
+      ? checkOutRecord.site_name || checkOutRecord.location || 'N/A'
+      : 'N/A';
+    const isSynced =
+      selectedDayLogs.length > 0 && selectedDayLogs.every(r => r.synced === 1);
 
     const selectedDateStr = selectedCalendarDay
-      ? new Date(calendarYear, calendarMonth, selectedCalendarDay).toLocaleDateString('en-IN', {
+      ? new Date(
+          calendarYear,
+          calendarMonth,
+          selectedCalendarDay,
+        ).toLocaleDateString('en-IN', {
           weekday: 'long',
           day: 'numeric',
           month: 'long',
-          year: 'numeric'
+          year: 'numeric',
         })
       : '';
 
     return (
       <SafeAreaView style={[styles.container, globalStyles.container]}>
         <View style={styles.header}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
             <TouchableOpacity
               style={styles.backArrowBtn}
               onPress={() => navigation.navigate('Login')}
               activeOpacity={0.7}>
               <Text style={styles.backArrowText}>←</Text>
             </TouchableOpacity>
-            <View style={{ flex: 1 }}>
+            <View style={{flex: 1}}>
               <Text style={styles.title}>My Attendance</Text>
-              <Text style={styles.subtitle}>ID: {employeeId} • Monthly Calendar</Text>
+              <Text style={styles.subtitle}>
+                ID: {employeeId} • Monthly Calendar
+              </Text>
             </View>
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={{paddingBottom: 40}}
+          showsVerticalScrollIndicator={false}>
           <View style={styles.calendarContainer}>
             <View style={styles.calendarHeader}>
-              <TouchableOpacity onPress={handlePrevMonth} style={styles.monthNavBtn}>
+              <TouchableOpacity
+                onPress={handlePrevMonth}
+                style={styles.monthNavBtn}>
                 <Text style={styles.monthNavBtnText}>◀</Text>
               </TouchableOpacity>
               <Text style={styles.monthLabel}>
                 {MONTH_NAMES[calendarMonth]} {calendarYear}
               </Text>
-              <TouchableOpacity onPress={handleNextMonth} style={styles.monthNavBtn}>
+              <TouchableOpacity
+                onPress={handleNextMonth}
+                style={styles.monthNavBtn}>
                 <Text style={styles.monthNavBtnText}>▶</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.weekdaysRow}>
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <Text key={day} style={styles.weekdayLabel}>{day}</Text>
+                <Text key={day} style={styles.weekdayLabel}>
+                  {day}
+                </Text>
               ))}
             </View>
 
-            <View style={styles.calendarGrid}>
-              {cells}
-            </View>
+            <View style={styles.calendarGrid}>{cells}</View>
           </View>
         </ScrollView>
 
@@ -361,7 +386,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
                 </TouchableOpacity>
               </View>
 
-              <ScrollView style={styles.dayModalBody} showsVerticalScrollIndicator={false}>
+              <ScrollView
+                style={styles.dayModalBody}
+                showsVerticalScrollIndicator={false}>
                 <Text style={styles.dayModalDateText}>{selectedDateStr}</Text>
 
                 <View style={styles.dayModalDivider} />
@@ -373,8 +400,12 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
                       <Text style={styles.dayDetailValue}>{checkInTime}</Text>
                     </View>
                     <View style={styles.dayDetailField}>
-                      <Text style={styles.dayDetailLabel}>Check-In Location</Text>
-                      <Text style={styles.dayDetailValueText} numberOfLines={2}>📍 {checkInLocation}</Text>
+                      <Text style={styles.dayDetailLabel}>
+                        Check-In Location
+                      </Text>
+                      <Text style={styles.dayDetailValueText} numberOfLines={2}>
+                        📍 {checkInLocation}
+                      </Text>
                     </View>
 
                     <View style={styles.dayModalDivider} />
@@ -384,21 +415,43 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
                       <Text style={styles.dayDetailValue}>{checkOutTime}</Text>
                     </View>
                     <View style={styles.dayDetailField}>
-                      <Text style={styles.dayDetailLabel}>Check-Out Location</Text>
-                      <Text style={styles.dayDetailValueText} numberOfLines={2}>📍 {checkOutLocation}</Text>
+                      <Text style={styles.dayDetailLabel}>
+                        Check-Out Location
+                      </Text>
+                      <Text style={styles.dayDetailValueText} numberOfLines={2}>
+                        📍 {checkOutLocation}
+                      </Text>
                     </View>
 
                     <View style={styles.dayModalDivider} />
 
                     <View style={styles.dayDetailField}>
                       <Text style={styles.dayDetailLabel}>Worked Duration</Text>
-                      <Text style={[styles.dayDetailValue, { color: COLORS.primary, fontWeight: '700' }]}>{workedDuration}</Text>
+                      <Text
+                        style={[
+                          styles.dayDetailValue,
+                          {color: COLORS.primary, fontWeight: '700'},
+                        ]}>
+                        {workedDuration}
+                      </Text>
                     </View>
 
                     <View style={styles.dayDetailField}>
                       <Text style={styles.dayDetailLabel}>Sync Status</Text>
-                      <View style={[styles.badgeSmall, { alignSelf: 'flex-start', marginTop: 4, backgroundColor: isSynced ? '#e6f4ea' : '#fff3e0' }]}>
-                        <Text style={[styles.badgeSmallText, { color: isSynced ? COLORS.success : COLORS.warning }]}>
+                      <View
+                        style={[
+                          styles.badgeSmall,
+                          {
+                            alignSelf: 'flex-start',
+                            marginTop: 4,
+                            backgroundColor: isSynced ? '#e6f4ea' : '#fff3e0',
+                          },
+                        ]}>
+                        <Text
+                          style={[
+                            styles.badgeSmallText,
+                            {color: isSynced ? COLORS.success : COLORS.warning},
+                          ]}>
                           {isSynced ? 'SYNCED' : 'PENDING'}
                         </Text>
                       </View>
@@ -406,8 +459,13 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
                   </View>
                 ) : (
                   <View style={styles.dayModalEmpty}>
-                    <Text style={styles.dayModalEmptyText}>Absent / No Records</Text>
-                    <Text style={styles.dayModalEmptySubText}>No check-in or check-out logs were registered on this date.</Text>
+                    <Text style={styles.dayModalEmptyText}>
+                      Absent / No Records
+                    </Text>
+                    <Text style={styles.dayModalEmptySubText}>
+                      No check-in or check-out logs were registered on this
+                      date.
+                    </Text>
                   </View>
                 )}
               </ScrollView>
@@ -428,8 +486,10 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
 
   const filteredRecords = React.useMemo(() => {
     const selectedDay = daysList.find(d => d.id === selectedDayId);
-    if (!selectedDay) return [];
-    
+    if (!selectedDay) {
+      return [];
+    }
+
     return allRecords.filter(record => {
       const recordDateStr = new Date(record.timestamp).toDateString();
       return recordDateStr === selectedDay.dateStr;
@@ -447,16 +507,20 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
   }, [totalWorkedTimeMs]);
 
   const dayStats = React.useMemo(() => {
-    const checkIns = filteredRecords.filter(r => r.check_type === 'check-in').length;
-    const checkOuts = filteredRecords.filter(r => r.check_type === 'check-out').length;
+    const checkIns = filteredRecords.filter(
+      r => r.check_type === 'check-in',
+    ).length;
+    const checkOuts = filteredRecords.filter(
+      r => r.check_type === 'check-out',
+    ).length;
     const uniqueIds = new Set(filteredRecords.map(r => r.employee_id)).size;
     const synced = filteredRecords.filter(r => r.synced === 1).length;
     const pending = filteredRecords.filter(r => r.synced === 0).length;
-    return { checkIns, checkOuts, uniqueIds, synced, pending };
+    return {checkIns, checkOuts, uniqueIds, synced, pending};
   }, [filteredRecords]);
 
   // Load database queue
-  const loadQueue = async () => {
+  const loadQueue = React.useCallback(async () => {
     try {
       console.log('Loading sync queue...');
       let records = await getPendingSyncRecords();
@@ -464,8 +528,12 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
 
       if (employeeId) {
         const filterId = String(employeeId).trim().toUpperCase();
-        records = records.filter((r: any) => String(r.employee_id).trim().toUpperCase() === filterId);
-        all = all.filter((r: any) => String(r.employee_id).trim().toUpperCase() === filterId);
+        records = records.filter(
+          (r: any) => String(r.employee_id).trim().toUpperCase() === filterId,
+        );
+        all = all.filter(
+          (r: any) => String(r.employee_id).trim().toUpperCase() === filterId,
+        );
       }
 
       console.log('Pending records:', records);
@@ -473,26 +541,20 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
       console.log('All records:', all);
       setAllRecords(all);
 
-      // Count synced records from database instead of relying on state
-      const syncedRecords = all.filter((r: any) => r.synced === 1);
-      console.log('Synced records count:', syncedRecords.length);
-      setSyncedCount(syncedRecords.length);
-
       // Load unsynced employees count
       const pendingEmps = await getPendingSyncEmployees();
       setPendingEmployeesCount(pendingEmps.length);
     } catch (e) {
       console.log('Error loading sync queue:', e);
     }
-  };
+  }, [employeeId]);
 
   // Load queue when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
       loadQueue();
-    }, []),
+    }, [loadQueue]),
   );
-
 
   useEffect(() => {
     let wasOffline = false;
@@ -506,9 +568,11 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
     // Subscribe to real-time network state changes
     const unsubscribe = subscribeToConnectivityChanges(connected => {
       setIsOnline(connected);
-      
-      const hasPending = pendingRecordsRef.current.length > 0 || pendingEmployeesCountRef.current > 0;
-      
+
+      const hasPending =
+        pendingRecordsRef.current.length > 0 ||
+        pendingEmployeesCountRef.current > 0;
+
       if (connected && wasOffline && hasPending && !isSyncingRef.current) {
         // INNOVATION: Automatic background sync on network restoration!
         console.log(
@@ -534,8 +598,13 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
       return;
     }
 
-    if (!HARDCODED_SERVER_URL || !HARDCODED_SERVER_URL.trim().startsWith('http')) {
-      setError('Server URL is not configured. Please update HARDCODED_SERVER_URL in the app.');
+    if (
+      !HARDCODED_SERVER_URL ||
+      !HARDCODED_SERVER_URL.trim().startsWith('http')
+    ) {
+      setError(
+        'Server URL is not configured. Please update HARDCODED_SERVER_URL in the app.',
+      );
       return;
     }
 
@@ -563,7 +632,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
             await markEmployeeAsSynced(emp.id);
           }
         } else {
-          throw new Error(`Server rejected employee profiles upload: ${response.status}`);
+          throw new Error(
+            `Server rejected employee profiles upload: ${response.status}`,
+          );
         }
       }
       setSyncProgress(40);
@@ -571,7 +642,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
       // 2. Upload Unsynced Attendance Records
       const recordsToSync = await getPendingSyncRecords();
       if (recordsToSync.length > 0) {
-        console.log(`Syncing ${recordsToSync.length} attendance logs to server...`);
+        console.log(
+          `Syncing ${recordsToSync.length} attendance logs to server...`,
+        );
         const response = await fetch(`${targetUrl}/api/sync/attendance`, {
           method: 'POST',
           headers: {
@@ -585,7 +658,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
             await markRecordAsSynced(record.uuid);
           }
         } else {
-          throw new Error(`Server rejected attendance logs upload: ${response.status}`);
+          throw new Error(
+            `Server rejected attendance logs upload: ${response.status}`,
+          );
         }
       }
       setSyncProgress(65);
@@ -595,17 +670,28 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
       const empGetRes = await fetch(`${targetUrl}/api/sync/employees`);
       if (empGetRes.ok) {
         const serverEmployees = await empGetRes.json();
-        console.log(`Downloaded ${serverEmployees.length} employee profiles from server.`);
+        console.log(
+          `Downloaded ${serverEmployees.length} employee profiles from server.`,
+        );
         for (const emp of serverEmployees) {
-          await insertOrUpdateEmployee({
-            id: emp.id,
-            name: emp.name,
-            department: emp.department,
-            photoPath: emp.photo_path || emp.photoPath,
-            faceVector: emp.faceVector || (emp.face_vector ? (typeof emp.face_vector === 'string' ? JSON.parse(emp.face_vector) : emp.face_vector) : null),
-            createdAt: emp.created_at || emp.createdAt,
-            updatedAt: emp.updated_at || emp.updatedAt,
-          }, 1); // Set synced=1 since they originated from server
+          await insertOrUpdateEmployee(
+            {
+              id: emp.id,
+              name: emp.name,
+              department: emp.department,
+              photoPath: emp.photo_path || emp.photoPath,
+              faceVector:
+                emp.faceVector ||
+                (emp.face_vector
+                  ? typeof emp.face_vector === 'string'
+                    ? JSON.parse(emp.face_vector)
+                    : emp.face_vector
+                  : null),
+              createdAt: emp.created_at || emp.createdAt,
+              updatedAt: emp.updated_at || emp.updatedAt,
+            },
+            1,
+          ); // Set synced=1 since they originated from server
         }
       }
       setSyncProgress(85);
@@ -615,16 +701,21 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
       const attGetRes = await fetch(`${targetUrl}/api/sync/attendance`);
       if (attGetRes.ok) {
         const serverAttendance = await attGetRes.json();
-        console.log(`Downloaded ${serverAttendance.length} attendance records from server.`);
+        console.log(
+          `Downloaded ${serverAttendance.length} attendance records from server.`,
+        );
         for (const record of serverAttendance) {
           await insertSyncedAttendance(record);
         }
       }
       setSyncProgress(100);
-
     } catch (err: any) {
       console.error('Two-way synchronization failed:', err);
-      setError(`Sync Failed: ${err?.message || err?.toString() || 'Connection Timeout'}`);
+      setError(
+        `Sync Failed: ${
+          err?.message || err?.toString() || 'Connection Timeout'
+        }`,
+      );
     } finally {
       // Refresh pending queue from database
       await loadQueue();
@@ -654,7 +745,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
     const {index, total} = getLogIndexInfo(item.uuid, item.employee_id);
     const isCheckIn = item.check_type === 'check-in';
     const dateStr = formatDateOnly(item.timestamp);
-    const inTimeStr = isCheckIn ? formatTimeOnly(item.timestamp) : formatTimeOnly(item.timestamp - (item.duration || 0));
+    const inTimeStr = isCheckIn
+      ? formatTimeOnly(item.timestamp)
+      : formatTimeOnly(item.timestamp - (item.duration || 0));
     const outTimeStr = isCheckIn ? null : formatTimeOnly(item.timestamp);
     const workedStr = isCheckIn ? null : formatDuration(item.duration);
     const siteName = item.site_name || 'Outside Geofence / Unknown';
@@ -674,7 +767,10 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
               !isCheckIn && {backgroundColor: 'rgba(156, 39, 176, 0.1)'},
             ]}>
             <Text
-              style={[styles.recordBadgeText, !isCheckIn && {color: '#9c27b0'}]}>
+              style={[
+                styles.recordBadgeText,
+                !isCheckIn && {color: '#9c27b0'},
+              ]}>
               {isCheckIn ? 'CHECK-IN' : 'CHECK-OUT'}
             </Text>
           </View>
@@ -713,7 +809,10 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
 
         <View style={styles.cardBody}>
           <Text style={styles.cardLocText} numberOfLines={1}>
-            📍 {siteName} {coords ? <Text style={styles.cardCoordsText}>({coords})</Text> : null}
+            📍 {siteName}{' '}
+            {coords ? (
+              <Text style={styles.cardCoordsText}>({coords})</Text>
+            ) : null}
           </Text>
 
           <View style={styles.timesContainer}>
@@ -733,7 +832,11 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
                 </View>
                 <View style={styles.timeBlock}>
                   <Text style={styles.timeBlockLabel}>Worked</Text>
-                  <Text style={[styles.timeBlockVal, {fontWeight: '700', color: COLORS.primary}]}>
+                  <Text
+                    style={[
+                      styles.timeBlockVal,
+                      {fontWeight: '700', color: COLORS.primary},
+                    ]}>
                     {workedStr}
                   </Text>
                 </View>
@@ -741,7 +844,11 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
             ) : (
               <View style={[styles.timeBlock, {flex: 1.5}]}>
                 <Text style={styles.timeBlockLabel}>Status</Text>
-                <Text style={[styles.timeBlockVal, {color: COLORS.secondary, fontWeight: '700'}]}>
+                <Text
+                  style={[
+                    styles.timeBlockVal,
+                    {color: COLORS.secondary, fontWeight: '700'},
+                  ]}>
                   Active Session
                 </Text>
               </View>
@@ -769,7 +876,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
         onRequestClose={() => setShowDetailModal(false)}>
         <SafeAreaView style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Attendance Details</Text>
+            <Text style={styles.modalTitle}>
+              {t('sync.attendanceDetailsTitle')}
+            </Text>
             <TouchableOpacity
               onPress={() => setShowDetailModal(false)}
               style={styles.closeButton}>
@@ -782,7 +891,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
               <View style={styles.detailsBox}>
                 {/* Employee ID */}
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Employee ID:</Text>
+                  <Text style={styles.detailLabel}>
+                    {t('login.employeeIdLabel')}:
+                  </Text>
                   <Text style={styles.detailValue}>
                     {selectedRecord.employee_id}
                   </Text>
@@ -791,28 +902,34 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
                 {/* Log Attempt Index (Duplicate records check) */}
                 {total > 1 && (
                   <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Log Index:</Text>
+                    <Text style={styles.detailLabel}>
+                      {t('sync.logIndexLabel')}
+                    </Text>
                     <Text
                       style={[
                         styles.detailValue,
                         {color: '#b85c1c', fontWeight: 'bold'},
                       ]}>
-                      Log {index} of {total}
+                      {t('sync.logIndexValue', {index, total})}
                     </Text>
                   </View>
                 )}
 
                 {/* Department */}
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Department:</Text>
+                  <Text style={styles.detailLabel}>
+                    {t('login.departmentLabel')}:
+                  </Text>
                   <Text style={styles.detailValue}>
-                    {selectedRecord.department || 'N/A'}
+                    {selectedRecord.department
+                      ? t(`departments.${selectedRecord.department}`)
+                      : 'N/A'}
                   </Text>
                 </View>
 
                 {/* Check Type */}
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Type:</Text>
+                  <Text style={styles.detailLabel}>{t('sync.typeLabel')}</Text>
                   <View
                     style={[
                       styles.badgeSmall,
@@ -842,7 +959,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
 
                 {/* Timestamp */}
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Date & Time:</Text>
+                  <Text style={styles.detailLabel}>
+                    {t('sync.dateTimeLabel')}
+                  </Text>
                   <Text style={styles.detailValue}>
                     {formatTimestamp(selectedRecord.timestamp)}
                   </Text>
@@ -850,7 +969,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
 
                 {/* Location */}
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Location Coords:</Text>
+                  <Text style={styles.detailLabel}>
+                    {t('sync.locationCoordsLabel')}
+                  </Text>
                   <Text style={styles.detailValue}>
                     {selectedRecord.location || 'Location not available'}
                   </Text>
@@ -858,7 +979,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
 
                 {/* Project Site */}
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Detected Site:</Text>
+                  <Text style={styles.detailLabel}>
+                    {t('sync.detectedSiteLabel')}
+                  </Text>
                   <Text style={styles.detailValue}>
                     {selectedRecord.site_name || 'Outside Geofence / Unknown'}
                   </Text>
@@ -866,30 +989,38 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
 
                 {/* Time Spent */}
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Time Spent:</Text>
+                  <Text style={styles.detailLabel}>
+                    {t('sync.timeSpentLabel')}
+                  </Text>
                   <Text style={styles.detailValue}>
                     {selectedRecord.check_type === 'check-out'
                       ? formatDuration(selectedRecord.duration)
-                      : 'Session Active (Check-in)'}
+                      : t('sync.sessionActiveText')}
                   </Text>
                 </View>
 
                 {/* Verification Status */}
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Verified:</Text>
+                  <Text style={styles.detailLabel}>
+                    {t('sync.verifiedLabel')}
+                  </Text>
                   <Text style={styles.detailValue}>
-                    {selectedRecord.verified === 1 ? '✓ Yes' : '✗ No'}
+                    {selectedRecord.verified === 1
+                      ? `✓ ${t('common.yes')}`
+                      : `✗ ${t('common.no')}`}
                   </Text>
                 </View>
 
-
-
                 {/* Sync Status */}
                 <View style={styles.detailSection}>
-                  <Text style={styles.detailSectionTitle}>Sync Status</Text>
+                  <Text style={styles.detailSectionTitle}>
+                    {t('sync.statusLabel')}
+                  </Text>
 
                   <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Status:</Text>
+                    <Text style={styles.detailLabel}>
+                      {t('sync.statusLabel')}
+                    </Text>
                     <View
                       style={[
                         styles.badgeSmall,
@@ -915,7 +1046,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
 
                   {selectedRecord.synced === 1 && (
                     <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Synced At:</Text>
+                      <Text style={styles.detailLabel}>
+                        {t('sync.syncedAtLabel')}
+                      </Text>
                       <Text style={styles.detailValue}>
                         {selectedRecord.synced_at
                           ? formatTimestamp(selectedRecord.synced_at)
@@ -927,7 +1060,9 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
 
                 {/* Record ID */}
                 <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Record ID:</Text>
+                  <Text style={styles.detailLabel}>
+                    {t('sync.recordIdLabel')}
+                  </Text>
                   <Text
                     style={[
                       styles.detailValue,
@@ -943,7 +1078,7 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
           <TouchableOpacity
             style={styles.modalCloseBtn}
             onPress={() => setShowDetailModal(false)}>
-            <Text style={styles.modalCloseBtnText}>Close</Text>
+            <Text style={styles.modalCloseBtnText}>{t('common.close')}</Text>
           </TouchableOpacity>
         </SafeAreaView>
       </Modal>
@@ -958,20 +1093,21 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
     <SafeAreaView style={[styles.container, globalStyles.container]}>
       {/* Header with Back Button */}
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{flexDirection: 'row', alignItems: 'center', gap: 12}}>
           <TouchableOpacity
             style={styles.backArrowBtn}
             onPress={() => navigation.goBack()}
             activeOpacity={0.7}>
             <Text style={styles.backArrowText}>←</Text>
           </TouchableOpacity>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>My Attendance</Text>
-            <Text style={styles.subtitle}>Local logs and database synchronization</Text>
+          <View style={{flex: 1}}>
+            <Text style={styles.title}>{t('sync.title')}</Text>
+            <Text style={styles.subtitle}>
+              {t('sync.datalakeSyncSubtitle')}
+            </Text>
           </View>
         </View>
       </View>
-
 
       {/* Network Connectivity Banner */}
       <View
@@ -990,14 +1126,12 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
             styles.networkText,
             {color: isOnline ? COLORS.success : COLORS.error},
           ]}>
-          {isOnline
-            ? 'Connected to Network (Automatic sync enabled)'
-            : 'No Network Connection (Operating in zero-network zone)'}
+          {isOnline ? t('sync.connectedText') : t('sync.disconnectedText')}
         </Text>
       </View>
 
       {/* Dynamic Horizontal Date Selector */}
-      <View style={{ marginBottom: 4 }}>
+      <View style={{marginBottom: 4}}>
         <ScrollView
           horizontal={true}
           showsHorizontalScrollIndicator={false}
@@ -1008,17 +1142,18 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
             return (
               <TouchableOpacity
                 key={day.id}
-                style={[
-                  styles.dayChip,
-                  isActive && styles.dayChipActive
-                ]}
+                style={[styles.dayChip, isActive && styles.dayChipActive]}
                 onPress={() => setSelectedDayId(day.id)}>
                 <Text
                   style={[
                     styles.dayChipText,
-                    isActive && styles.dayChipTextActive
+                    isActive && styles.dayChipTextActive,
                   ]}>
-                  {day.label}
+                  {day.label === 'Today'
+                    ? t('sync.today')
+                    : day.label === 'Yesterday'
+                    ? t('sync.yesterday')
+                    : day.label}
                 </Text>
               </TouchableOpacity>
             );
@@ -1027,61 +1162,78 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
       </View>
 
       {/* Sync Status Cards for Selected Day */}
-      <View style={{ marginBottom: 4 }}>
+      <View style={{marginBottom: 4}}>
         <ScrollView
           horizontal={true}
           showsHorizontalScrollIndicator={false}
           style={styles.statsScrollContainer}
           contentContainerStyle={styles.statsScrollContent}>
-          
           {!employeeId && (
             <>
               {/* Card 1: Check-ins */}
               <View style={styles.statusCardHorizontal}>
-                <Text style={styles.cardLabel}>Total Check-ins</Text>
-                <Text style={[styles.cardVal, {color: COLORS.primary}]}>{dayStats.checkIns}</Text>
+                <Text style={styles.cardLabel}>{t('sync.totalCheckIns')}</Text>
+                <Text style={[styles.cardVal, {color: COLORS.primary}]}>
+                  {dayStats.checkIns}
+                </Text>
               </View>
-              
+
               {/* Card 2: Check-outs */}
-              <View style={[styles.statusCardHorizontal, {backgroundColor: 'rgba(156, 39, 176, 0.05)'}]}>
-                <Text style={styles.cardLabel}>Total Check-outs</Text>
-                <Text style={[styles.cardVal, {color: '#9c27b0'}]}>{dayStats.checkOuts}</Text>
+              <View
+                style={[
+                  styles.statusCardHorizontal,
+                  {backgroundColor: 'rgba(156, 39, 176, 0.05)'},
+                ]}>
+                <Text style={styles.cardLabel}>{t('sync.totalCheckOuts')}</Text>
+                <Text style={[styles.cardVal, {color: '#9c27b0'}]}>
+                  {dayStats.checkOuts}
+                </Text>
               </View>
 
               {/* Card 3: Unique IDs */}
-              <View style={[styles.statusCardHorizontal, {backgroundColor: 'rgba(0, 150, 136, 0.05)'}]}>
-                <Text style={styles.cardLabel}>Total Unique IDs</Text>
-                <Text style={[styles.cardVal, {color: '#009688'}]}>{dayStats.uniqueIds}</Text>
+              <View
+                style={[
+                  styles.statusCardHorizontal,
+                  {backgroundColor: 'rgba(0, 150, 136, 0.05)'},
+                ]}>
+                <Text style={styles.cardLabel}>{t('sync.totalUniqueIds')}</Text>
+                <Text style={[styles.cardVal, {color: '#009688'}]}>
+                  {dayStats.uniqueIds}
+                </Text>
               </View>
             </>
           )}
 
           {/* Card 4: Synced */}
-          <View style={[styles.statusCardHorizontal, {backgroundColor: '#e6f4ea'}]}>
-            <Text style={styles.cardLabel}>Synced Logs</Text>
+          <View
+            style={[styles.statusCardHorizontal, {backgroundColor: '#e6f4ea'}]}>
+            <Text style={styles.cardLabel}>{t('sync.syncedLogs')}</Text>
             <Text style={[styles.cardVal, {color: COLORS.success}]}>
               {dayStats.synced}
             </Text>
           </View>
 
           {/* Card 5: Pending */}
-          <View style={[styles.statusCardHorizontal, {backgroundColor: '#fff3e0'}]}>
-            <Text style={styles.cardLabel}>Pending Sync</Text>
+          <View
+            style={[styles.statusCardHorizontal, {backgroundColor: '#fff3e0'}]}>
+            <Text style={styles.cardLabel}>{t('sync.pendingSync')}</Text>
             <Text style={[styles.cardVal, {color: COLORS.warning}]}>
               {dayStats.pending}
             </Text>
           </View>
-
           {employeeId && (
             /* Card 6: Total Worked Time */
-            <View style={[styles.statusCardHorizontal, {backgroundColor: 'rgba(30, 58, 138, 0.05)', width: 140}]}>
+            <View
+              style={[
+                styles.statusCardHorizontal,
+                {backgroundColor: 'rgba(30, 58, 138, 0.05)', width: 140},
+              ]}>
               <Text style={styles.cardLabel}>Total Worked</Text>
               <Text style={[styles.cardVal, {color: COLORS.primary}]}>
                 {formattedTotalWorked}
               </Text>
             </View>
           )}
-          
         </ScrollView>
       </View>
 
@@ -1089,9 +1241,7 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
       {isSyncing && (
         <View style={styles.progressSection}>
           <View style={styles.progressMeta}>
-            <Text style={styles.progressLabel}>
-              Uploading records to AWS Server...
-            </Text>
+            <Text style={styles.progressLabel}>{t('sync.uploadingToAws')}</Text>
             <Text style={styles.progressPercent}>{syncProgress}%</Text>
           </View>
           <View style={styles.progressTrack}>
@@ -1111,7 +1261,7 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
 
       {/* Pending Logs List for Selected Day */}
       <View style={styles.listSection}>
-        <Text style={styles.sectionTitle}>Local Queue Logs</Text>
+        <Text style={styles.sectionTitle}>{t('sync.localQueueLogs')}</Text>
         {filteredRecords.length > 0 ? (
           <FlatList
             data={filteredRecords}
@@ -1122,9 +1272,21 @@ const SyncScreen: React.FC<SyncScreenProps> = ({navigation, route}) => {
           />
         ) : (
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>Looks like you have the day off :)</Text>
+            <Text style={styles.emptyText}>{t('sync.dayOffTitle')}</Text>
             <Text style={styles.emptySubText}>
-              No attendance logs recorded for {daysList.find(d => d.id === selectedDayId)?.label || 'this day'}.
+              {t('sync.noLogsRecorded', {
+                date: (() => {
+                  const dayObj = daysList.find(d => d.id === selectedDayId);
+                  if (!dayObj) {
+                    return '';
+                  }
+                  return dayObj.label === 'Today'
+                    ? t('sync.today')
+                    : dayObj.label === 'Yesterday'
+                    ? t('sync.yesterday')
+                    : dayObj.label;
+                })(),
+              })}
             </Text>
           </View>
         )}
@@ -1195,7 +1357,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     elevation: 3,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.05,
     shadowRadius: 4,
   },
@@ -1221,7 +1383,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     elevation: 2,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.05,
     shadowRadius: 3,
   },
@@ -1291,7 +1453,7 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     elevation: 3,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.04,
     shadowRadius: 3,
   },
@@ -1431,7 +1593,7 @@ const styles = StyleSheet.create({
     minHeight: SIZES.buttonHeight,
     elevation: 3,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.12,
     shadowRadius: 4,
   },
@@ -1474,7 +1636,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
     elevation: 2,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.03,
     shadowRadius: 2,
   },
@@ -1557,7 +1719,7 @@ const styles = StyleSheet.create({
     minHeight: SIZES.buttonHeight,
     elevation: 3,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.12,
     shadowRadius: 4,
   },
@@ -1619,7 +1781,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     elevation: 3,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.04,
     shadowRadius: 3,
   },
@@ -1650,7 +1812,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     elevation: 2,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.05,
     shadowRadius: 3,
   },
@@ -1715,7 +1877,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     elevation: 3,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.05,
     shadowRadius: 4,
   },
@@ -1745,7 +1907,7 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     elevation: 3,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.05,
     shadowRadius: 4,
   },
@@ -1872,7 +2034,7 @@ const styles = StyleSheet.create({
     maxHeight: '85%',
     elevation: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.15,
     shadowRadius: 12,
   },

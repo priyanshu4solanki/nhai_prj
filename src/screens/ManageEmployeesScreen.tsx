@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
@@ -10,52 +10,34 @@ import {
   Alert,
   FlatList,
 } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {useFocusEffect} from '@react-navigation/native';
 
-import { RootStackParamList } from '../types';
-import { COLORS, SIZES } from '../constants';
-import { globalStyles } from '../theme';
-import { getAllEmployees, deleteEmployee } from '../services/databaseService';
+import {RootStackParamList} from '../types';
+import {COLORS, SIZES} from '../constants';
+import {globalStyles} from '../theme';
+import {getAllEmployees, deleteEmployee} from '../services/databaseService';
+import {useTranslation} from 'react-i18next';
 
-type ManageEmployeesScreenProps = NativeStackScreenProps<RootStackParamList, 'ManageEmployees'>;
+type ManageEmployeesScreenProps = NativeStackScreenProps<
+  RootStackParamList,
+  'ManageEmployees'
+>;
 
 // Hardcoded admin username for verification
 const ADMIN_USERNAME = 'Priyanshu solanki';
 
-const ManageEmployeesScreen: React.FC<ManageEmployeesScreenProps> = ({ navigation, route }) => {
+const ManageEmployeesScreen: React.FC<ManageEmployeesScreenProps> = ({
+  navigation,
+  route,
+}) => {
+  const {t} = useTranslation();
   const adminUser = route?.params?.adminUser;
   const [employees, setEmployees] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Verify admin access
-  if (!adminUser || adminUser !== ADMIN_USERNAME) {
-    return (
-      <SafeAreaView style={[styles.container, globalStyles.container]}>
-        <View style={styles.unauthorizedContainer}>
-          <Text style={styles.unauthorizedIcon}>🔒</Text>
-          <Text style={styles.unauthorizedTitle}>Access Denied</Text>
-          <Text style={styles.unauthorizedText}>
-            Only authorized administrators can manage employees.
-          </Text>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  useFocusEffect(
-    React.useCallback(() => {
-      loadEmployees();
-    }, [])
-  );
-
-  const loadEmployees = async () => {
+  const loadEmployees = React.useCallback(async () => {
     setIsLoading(true);
     setError('');
     try {
@@ -63,51 +45,90 @@ const ManageEmployeesScreen: React.FC<ManageEmployeesScreenProps> = ({ navigatio
       setEmployees(data);
     } catch (err) {
       console.error('Error loading employees:', err);
-      setError('Failed to load employees');
+      setError(t('errors.failedToLoadEmployees'));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [t]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (adminUser === ADMIN_USERNAME) {
+        loadEmployees();
+      }
+    }, [adminUser, loadEmployees]),
+  );
+
+  // Verify admin access
+  if (!adminUser || adminUser !== ADMIN_USERNAME) {
+    return (
+      <SafeAreaView style={[styles.container, globalStyles.container]}>
+        <View style={styles.unauthorizedContainer}>
+          <Text style={styles.unauthorizedIcon}>🔒</Text>
+          <Text style={styles.unauthorizedTitle}>
+            {t('register.accessDenied')}
+          </Text>
+          <Text style={styles.unauthorizedText}>
+            {t('admin.onlyAdminsCanManage')}
+          </Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>{t('common.back')}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const handleDeleteEmployee = (employeeId: string, employeeName: string) => {
     Alert.alert(
-      'Delete Employee',
-      `Are you sure you want to delete ${employeeName} (${employeeId})?\n\nThis action cannot be undone.`,
+      t('admin.deleteEmployeeTitle'),
+      t('admin.deleteEmployeeConfirm', {name: employeeName, id: employeeId}),
       [
         {
-          text: 'Cancel',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               const result = await deleteEmployee(employeeId);
               if (result.success) {
-                Alert.alert('Success', `${employeeName} has been deleted.`);
+                Alert.alert(
+                  t('common.success'),
+                  t('admin.employeeDeleted', {name: employeeName}),
+                );
                 loadEmployees();
               } else {
-                Alert.alert('Error', 'Failed to delete employee');
+                Alert.alert(
+                  t('common.error'),
+                  t('errors.failedToDeleteEmployee'),
+                );
               }
             } catch (err) {
               console.error('Error deleting employee:', err);
-              Alert.alert('Error', 'Failed to delete employee');
+              Alert.alert(
+                t('common.error'),
+                t('errors.failedToDeleteEmployee'),
+              );
             }
           },
         },
-      ]
+      ],
     );
   };
 
-  const renderEmployeeCard = ({ item }: { item: any }) => (
+  const renderEmployeeCard = ({item}: {item: any}) => (
     <View style={styles.employeeCard}>
       <View style={styles.employeeInfo}>
         <Text style={styles.employeeName}>{item.name}</Text>
         <View style={styles.employeeDetails}>
           <Text style={styles.employeeId}>{item.id}</Text>
           <Text style={styles.employeeDepartment}>
-            {item.department.charAt(0).toUpperCase() + item.department.slice(1)}
+            {t(`departments.${item.department}`)}
           </Text>
         </View>
       </View>
@@ -121,12 +142,14 @@ const ManageEmployeesScreen: React.FC<ManageEmployeesScreenProps> = ({ navigatio
 
   return (
     <SafeAreaView style={[styles.container, globalStyles.container]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.headerSection}>
-          <Text style={styles.headerTitle}>Manage Employees</Text>
+          <Text style={styles.headerTitle}>{t('admin.manageEmployees')}</Text>
           <Text style={styles.headerSubtitle}>
-            View and remove employees from the system
+            {t('admin.manageEmployeesSubtitle')}
           </Text>
         </View>
 
@@ -134,25 +157,31 @@ const ManageEmployeesScreen: React.FC<ManageEmployeesScreenProps> = ({ navigatio
         {isLoading ? (
           <View style={styles.centerContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading employees...</Text>
+            <Text style={styles.loadingText}>
+              {t('admin.loadingEmployees')}
+            </Text>
           </View>
         ) : error ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={loadEmployees}>
-              <Text style={styles.retryButtonText}>Retry</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={loadEmployees}>
+              <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         ) : employees.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>👥</Text>
-            <Text style={styles.emptyTitle}>No Employees</Text>
-            <Text style={styles.emptyText}>No employees registered yet.</Text>
+            <Text style={styles.emptyTitle}>{t('admin.noEmployeesTitle')}</Text>
+            <Text style={styles.emptyText}>{t('admin.noEmployeesText')}</Text>
           </View>
         ) : (
           <>
             <View style={styles.countBadge}>
-              <Text style={styles.countText}>Total: {employees.length}</Text>
+              <Text style={styles.countText}>
+                {t('admin.totalEmployees', {count: employees.length})}
+              </Text>
             </View>
             <FlatList
               data={employees}
@@ -167,8 +196,12 @@ const ManageEmployeesScreen: React.FC<ManageEmployeesScreenProps> = ({ navigatio
 
       {/* Footer */}
       <View style={styles.footerControls}>
-        <TouchableOpacity style={styles.backNavButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backNavButtonText}>Back to Dashboard</Text>
+        <TouchableOpacity
+          style={styles.backNavButton}
+          onPress={() => navigation.goBack()}>
+          <Text style={styles.backNavButtonText}>
+            {t('admin.backToDashboard')}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

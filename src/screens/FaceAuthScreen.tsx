@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
@@ -8,25 +8,30 @@ import {
   Dimensions,
   Animated,
 } from 'react-native';
-import { RNCamera } from 'react-native-camera';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import {RNCamera} from 'react-native-camera';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {useTranslation} from 'react-i18next';
 
-import { RootStackParamList } from '../types';
-import { COLORS, SIZES, STRINGS } from '../constants';
-import { globalStyles } from '../theme';
-import { computeFaceVector } from '../utils';
-import { hasCompletedAttendanceToday } from '../services/databaseService';
+import {RootStackParamList} from '../types';
+import {COLORS, SIZES} from '../constants';
+import {computeFaceVector} from '../utils';
+import {hasCompletedAttendanceToday} from '../services/databaseService';
 
-type FaceAuthScreenProps = NativeStackScreenProps<RootStackParamList, 'FaceAuth'>;
+type FaceAuthScreenProps = NativeStackScreenProps<
+  RootStackParamList,
+  'FaceAuth'
+>;
 
-const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) => {
-  const { employeeId, department } = route.params;
+const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({navigation, route}) => {
+  const {employeeId, department} = route.params;
+  const {t} = useTranslation();
 
-  const [faceDetected, setFaceDetected] = useState(false);
-  const [instruction, setInstruction] = useState(STRINGS.faceAuth.detectingFace);
+  const [instruction, setInstruction] = useState(t('faceAuth.detectingFace'));
   const [isAligned, setIsAligned] = useState(false);
   const [pulseAnim] = useState(new Animated.Value(1));
-  const [capturedFaceVector, setCapturedFaceVector] = useState<number[] | null>(null);
+  const [capturedFaceVector, setCapturedFaceVector] = useState<number[] | null>(
+    null,
+  );
 
   // Check if attendance is already completed today
   useEffect(() => {
@@ -40,7 +45,7 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
       }
     };
     checkAttendance();
-  }, [employeeId]);
+  }, [employeeId, navigation]);
 
   // Pulse animation for alignment box
   useEffect(() => {
@@ -58,16 +63,18 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
             duration: 600,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
       anim.start();
     } else {
       pulseAnim.setValue(1);
     }
     return () => {
-      if (anim) anim.stop();
+      if (anim) {
+        anim.stop();
+      }
     };
-  }, [isAligned]);
+  }, [isAligned, pulseAnim]);
 
   // Automated progress transition to Liveness
   // Only requires isAligned — face vector is optional (RecognitionScreen handles legacy/empty vectors)
@@ -75,35 +82,32 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
     let timeout: NodeJS.Timeout;
     if (isAligned) {
       timeout = setTimeout(() => {
-        navigation.navigate('Liveness', { 
-          employeeId, 
-          department, 
-          faceVector: capturedFaceVector || [] 
+        navigation.navigate('Liveness', {
+          employeeId,
+          department,
+          faceVector: capturedFaceVector || [],
         });
       }, 1500);
     }
     return () => clearTimeout(timeout);
-  }, [isAligned]);
+  }, [isAligned, employeeId, department, navigation, capturedFaceVector]);
 
-  const handleFacesDetected = ({ faces }: { faces: any[] }) => {
+  const handleFacesDetected = ({faces}: {faces: any[]}) => {
     if (faces.length === 0) {
-      setFaceDetected(false);
       setIsAligned(false);
-      setInstruction(STRINGS.faceAuth.faceNotDetected);
+      setInstruction(t('faceAuth.faceNotDetected'));
       return;
     }
 
     if (faces.length > 1) {
-      setFaceDetected(false);
       setIsAligned(false);
-      setInstruction(STRINGS.faceAuth.multiplesFaces);
+      setInstruction(t('faceAuth.multiplesFaces'));
       return;
     }
 
     const face = faces[0];
-    setFaceDetected(true);
 
-    const { origin, size } = face.bounds;
+    const {origin, size} = face.bounds;
     const screenWidth = Dimensions.get('window').width;
     const screenHeight = Dimensions.get('window').height;
 
@@ -118,22 +122,22 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
     const isYCentered = Math.abs(faceCenterY - viewportCenterY) < 130;
 
     if (!isXCentered || !isYCentered) {
-      setInstruction('Align face inside the oval frame');
+      setInstruction(t('faceAuth.alignFaceInstruction'));
       setIsAligned(false);
       setCapturedFaceVector(null);
     } else if (size.width < 120) {
-      setInstruction(STRINGS.faceAuth.moveCloser);
+      setInstruction(t('faceAuth.moveCloser'));
       setIsAligned(false);
       setCapturedFaceVector(null);
     } else if (size.width > 270) {
-      setInstruction(STRINGS.faceAuth.moveAway);
+      setInstruction(t('faceAuth.moveAway'));
       setIsAligned(false);
       setCapturedFaceVector(null);
     } else {
       // Face is correctly positioned — mark as aligned regardless of landmark availability
       // computeFaceVector may return null on devices without full ML Kit support
       const vector = computeFaceVector(face);
-      setInstruction(STRINGS.faceAuth.faceDetected);
+      setInstruction(t('faceAuth.faceDetected'));
       setIsAligned(true);
       if (vector) {
         setCapturedFaceVector(vector);
@@ -146,9 +150,9 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
     <SafeAreaView style={styles.container}>
       {/* Header Banner */}
       <View style={styles.headerBanner}>
-        <Text style={styles.headerTitle}>{STRINGS.faceAuth.title}</Text>
+        <Text style={styles.headerTitle}>{t('faceAuth.title')}</Text>
         <Text style={styles.headerSubtitle}>
-          Employee verification for ID: <Text style={{ fontWeight: '700' }}>{employeeId}</Text>
+          {t('faceAuth.verificationForId', {id: employeeId})}
         </Text>
       </View>
 
@@ -159,16 +163,19 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
           type={RNCamera.Constants.Type.front}
           flashMode={RNCamera.Constants.FlashMode.off}
           captureAudio={false}
-          faceDetectorEnabled={true}
           faceDetectionMode={RNCamera.Constants.FaceDetection.Mode.accurate}
-          faceDetectionLandmarks={RNCamera.Constants.FaceDetection.Landmarks.all}
-          faceDetectionClassifications={RNCamera.Constants.FaceDetection.Classifications.all}
+          faceDetectionLandmarks={
+            RNCamera.Constants.FaceDetection.Landmarks.all
+          }
+          faceDetectionClassifications={
+            RNCamera.Constants.FaceDetection.Classifications.all
+          }
           onFacesDetected={handleFacesDetected}
           androidCameraPermissionOptions={{
-            title: 'Camera Permission',
-            message: 'Camera permission is required for face authentication.',
-            buttonPositive: 'OK',
-            buttonNegative: 'Cancel',
+            title: t('common.cameraPermissionTitle'),
+            message: t('faceAuth.cameraPermissionMessage'),
+            buttonPositive: t('common.ok'),
+            buttonNegative: t('common.cancel'),
           }}
         />
 
@@ -179,7 +186,7 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
               styles.alignmentOval,
               {
                 borderColor: isAligned ? COLORS.success : COLORS.secondary,
-                transform: [{ scale: pulseAnim }],
+                transform: [{scale: pulseAnim}],
               },
             ]}
           />
@@ -191,13 +198,13 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
         <View
           style={[
             styles.statusIndicatorBar,
-            { backgroundColor: isAligned ? COLORS.success : COLORS.secondary },
+            {backgroundColor: isAligned ? COLORS.success : COLORS.secondary},
           ]}
         />
         <Text style={styles.instructionText}>{instruction}</Text>
         {isAligned && (
           <Text style={styles.progressSubText}>
-            Perfect! Hold still, proceeding to Liveness...
+            {t('faceAuth.proceedingToLiveness')}
           </Text>
         )}
       </View>
@@ -207,14 +214,16 @@ const FaceAuthScreen: React.FC<FaceAuthScreenProps> = ({ navigation, route }) =>
         <TouchableOpacity
           style={styles.cancelButton}
           onPress={() => navigation.navigate('Login')}>
-          <Text style={styles.cancelButtonText}>Cancel & Exit</Text>
+          <Text style={styles.cancelButtonText}>
+            {t('faceAuth.cancelAndExit')}
+          </Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 };
 
-const { width } = Dimensions.get('window');
+const {width} = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
@@ -261,7 +270,7 @@ const styles = StyleSheet.create({
     borderRadius: (width * 0.68) / 2,
     borderWidth: 3.5,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 0 },
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.8,
     shadowRadius: 10,
     backgroundColor: 'transparent',
@@ -277,7 +286,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 6,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.25,
     shadowRadius: 4.5,
   },

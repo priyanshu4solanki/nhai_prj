@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, {useEffect, useRef, useState} from 'react';
 import {
   View,
   Text,
@@ -8,21 +8,28 @@ import {
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {useTranslation} from 'react-i18next';
 
-import { RootStackParamList } from '../types';
-import { COLORS, SIZES, STRINGS } from '../constants';
-import { globalStyles } from '../theme';
-import { getEmployee } from '../services/databaseService';
-import { compareFaceVectors } from '../utils';
+import {RootStackParamList} from '../types';
+import {COLORS, SIZES} from '../constants';
+import {globalStyles} from '../theme';
+import {getEmployee} from '../services/databaseService';
+import {compareFaceVectors} from '../utils';
 
-type RecognitionScreenProps = NativeStackScreenProps<RootStackParamList, 'Recognition'>;
+type RecognitionScreenProps = NativeStackScreenProps<
+  RootStackParamList,
+  'Recognition'
+>;
 
-const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route }) => {
-  const { employeeId, department } = route.params;
+const RecognitionScreen: React.FC<RecognitionScreenProps> = ({
+  navigation,
+  route,
+}) => {
+  const {employeeId} = route.params;
+  const {t} = useTranslation();
 
-  const [statusText, setStatusText] = useState(STRINGS.recognition.processing);
-  const [loading, setLoading] = useState(true);
+  const [statusText, setStatusText] = useState(t('recognition.processing'));
 
   const laserAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -41,7 +48,7 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
           duration: 1000,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
     laserLoop.start();
 
@@ -58,7 +65,7 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
           duration: 800,
           useNativeDriver: true,
         }),
-      ])
+      ]),
     );
     pulseLoop.start();
 
@@ -69,11 +76,12 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
       laserLoop.stop();
       pulseLoop.stop();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const runFaceComparison = async () => {
     try {
-      setStatusText(STRINGS.recognition.comparingFace);
+      setStatusText(t('recognition.comparingFace'));
 
       // Fetch pre-registered employee from local SQLite
       const employee = await getEmployee(employeeId);
@@ -86,7 +94,7 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
         navigation.navigate('Result', {
           employeeId,
           status: 'failure',
-          message: `Employee credentials not found locally. Please register face offline first.`,
+          message: t('recognition.credentialsNotFound'),
         });
         return;
       }
@@ -99,7 +107,8 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
         navigation.navigate('Result', {
           employeeId,
           status: 'failure',
-          message: `Face capture failed — landmarks not detected. Please ensure good lighting and look directly at the camera.`,
+          message:
+            'Face capture failed — landmarks not detected. Please ensure good lighting and look directly at the camera.',
         });
         return;
       }
@@ -109,7 +118,9 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
       // A mock/random vector from generateRandomFaceVector has high variance with no geometric structure.
       // Detect legacy random vectors by checking if the stored length mismatches or is structurally invalid.
       const isLegacyMockVector = (v: number[]) => {
-        if (!v || v.length !== 128) return true;
+        if (!v || v.length !== 128) {
+          return true;
+        }
         // Real geometric vectors have values in a bounded range from face ratios
         // Random mock vectors have values spread across a wide range (Math.random() * 2 - 1)
         const maxVal = Math.max(...v);
@@ -136,7 +147,8 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
         navigation.navigate('Result', {
           employeeId,
           status: 'failure',
-          message: `Live face capture failed — insufficient landmark data. Please try in better lighting.`,
+          message:
+            'Live face capture failed — insufficient landmark data. Please try in better lighting.',
         });
         return;
       }
@@ -144,20 +156,24 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
       // ── Face Comparison: Real vs Real vectors ────────────────────────────────
       // Threshold 0.75: strict enough to reject different people, lenient enough
       // for same-person variation (lighting, angle, expression)
-      const comparison = compareFaceVectors(liveFaceVector, preRegisteredVector, 0.75);
+      const comparison = compareFaceVectors(
+        liveFaceVector,
+        preRegisteredVector,
+        0.75,
+      );
       const matchPercentage = (comparison.similarity * 100).toFixed(1);
 
       if (comparison.matched) {
         navigation.navigate('Result', {
           employeeId,
           status: 'success',
-          message: `Face recognized successfully. Match confidence: ${matchPercentage}%`,
+          message: t('recognition.matchSuccess', {confidence: matchPercentage}),
         });
       } else {
         navigation.navigate('Result', {
           employeeId,
           status: 'failure',
-          message: `Face does not match registered credentials for ID ${employeeId}. Similarity: ${matchPercentage}% (required: 75%). Ensure you are the registered employee.`,
+          message: t('recognition.matchFailed'),
         });
       }
     } catch (error) {
@@ -165,10 +181,8 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
       navigation.navigate('Result', {
         employeeId,
         status: 'failure',
-        message: `Offline recognition pipeline encountered a math calculation error.`,
+        message: t('recognition.mathError'),
       });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -177,10 +191,7 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
       {/* Decorative scanner frame */}
       <View style={styles.scannerWrapper}>
         <Animated.View
-          style={[
-            styles.scannerBorderRing,
-            { transform: [{ scale: pulseAnim }] },
-          ]}
+          style={[styles.scannerBorderRing, {transform: [{scale: pulseAnim}]}]}
         />
         <View style={styles.scanningFrame}>
           {/* Wireframe Silhouette */}
@@ -208,16 +219,22 @@ const RecognitionScreen: React.FC<RecognitionScreenProps> = ({ navigation, route
 
       {/* Floating Status Box */}
       <View style={styles.statusBox}>
-        <ActivityIndicator size="small" color={COLORS.secondary} style={styles.spinner} />
+        <ActivityIndicator
+          size="small"
+          color={COLORS.secondary}
+          style={styles.spinner}
+        />
         <Text style={styles.statusText}>{statusText}</Text>
       </View>
 
-      <Text style={styles.processingBadge}>OFFLINE ML ENGINE ACTIVE</Text>
+      <Text style={styles.processingBadge}>
+        {t('recognition.offlineEngineActive')}
+      </Text>
     </SafeAreaView>
   );
 };
 
-const { width } = Dimensions.get('window');
+const {width} = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
@@ -281,7 +298,7 @@ const styles = StyleSheet.create({
     height: 3,
     backgroundColor: COLORS.secondary, // Glowing orange laser line
     shadowColor: COLORS.secondary,
-    shadowOffset: { width: 0, height: 0 },
+    shadowOffset: {width: 0, height: 0},
     shadowOpacity: 0.95,
     shadowRadius: 8,
     elevation: 8,
@@ -295,7 +312,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 6,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.25,
     shadowRadius: 5,
   },

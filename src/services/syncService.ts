@@ -8,7 +8,7 @@ import {
   insertOrUpdateEmployee,
   insertSyncedAttendance,
 } from './databaseService';
-import { checkInternetConnectivity } from '../utils';
+import {checkInternetConnectivity} from '../utils';
 
 export const runBackgroundSync = async (): Promise<{
   success: boolean;
@@ -43,7 +43,7 @@ export const runBackgroundSync = async (): Promise<{
     if (pendingEmps.length > 0) {
       const response = await fetch(`${targetUrl}/api/sync/employees`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(pendingEmps),
       });
 
@@ -53,7 +53,9 @@ export const runBackgroundSync = async (): Promise<{
           uploadedEmployees++;
         }
       } else {
-        throw new Error(`Failed to upload employees: status ${response.status}`);
+        throw new Error(
+          `Failed to upload employees: status ${response.status}`,
+        );
       }
     }
 
@@ -62,7 +64,7 @@ export const runBackgroundSync = async (): Promise<{
     if (pendingRecords.length > 0) {
       const response = await fetch(`${targetUrl}/api/sync/attendance`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(pendingRecords),
       });
 
@@ -72,7 +74,9 @@ export const runBackgroundSync = async (): Promise<{
           uploadedAttendance++;
         }
       } else {
-        throw new Error(`Failed to upload attendance: status ${response.status}`);
+        throw new Error(
+          `Failed to upload attendance: status ${response.status}`,
+        );
       }
     }
 
@@ -81,15 +85,24 @@ export const runBackgroundSync = async (): Promise<{
     if (empRes.ok) {
       const serverEmployees = await empRes.json();
       for (const emp of serverEmployees) {
-        const result = await insertOrUpdateEmployee({
-          id: emp.id,
-          name: emp.name,
-          department: emp.department,
-          photoPath: emp.photo_path || emp.photoPath,
-          faceVector: emp.faceVector || (emp.face_vector ? (typeof emp.face_vector === 'string' ? JSON.parse(emp.face_vector) : emp.face_vector) : null),
-          createdAt: emp.created_at || emp.createdAt,
-          updatedAt: emp.updated_at || emp.updatedAt,
-        }, 1); // Set synced=1
+        const result = await insertOrUpdateEmployee(
+          {
+            id: emp.id,
+            name: emp.name,
+            department: emp.department,
+            photoPath: emp.photo_path || emp.photoPath,
+            faceVector:
+              emp.faceVector ||
+              (emp.face_vector
+                ? typeof emp.face_vector === 'string'
+                  ? JSON.parse(emp.face_vector)
+                  : emp.face_vector
+                : null),
+            createdAt: emp.created_at || emp.createdAt,
+            updatedAt: emp.updated_at || emp.updatedAt,
+          },
+          1,
+        ); // Set synced=1
         if (result.success) {
           downloadedEmployees++;
         }

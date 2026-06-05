@@ -1,5 +1,5 @@
 export const generateUUID = (): string => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.floor(Math.random() * 16);
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
@@ -37,17 +37,21 @@ export const calculateEyeAspectRatio = (
   leftEyeOpen: boolean,
   rightEyeOpen: boolean,
   verticalDistance: number,
-  horizontalDistance: number
+  horizontalDistance: number,
 ): number => {
-  if (!leftEyeOpen || !rightEyeOpen) return 0;
-  if (horizontalDistance === 0) return 0;
+  if (!leftEyeOpen || !rightEyeOpen) {
+    return 0;
+  }
+  if (horizontalDistance === 0) {
+    return 0;
+  }
   return verticalDistance / horizontalDistance;
 };
 
 export const detectBlink = (
   currentEAR: number,
   previousEAR: number,
-  threshold: number = 0.2
+  threshold: number = 0.2,
 ): boolean => {
   // Blink detected if EAR drops significantly
   return previousEAR > threshold && currentEAR <= threshold;

@@ -1,6 +1,6 @@
 import React from 'react';
-import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import {NavigationContainer} from '@react-navigation/native';
+import {createNativeStackNavigator} from '@react-navigation/native-stack';
 
 import SplashScreen from '../screens/SplashScreen';
 import LoginScreen from '../screens/LoginScreen';
@@ -14,7 +14,7 @@ import ResultScreen from '../screens/ResultScreen';
 import SyncScreen from '../screens/SyncScreen';
 import ManageSitesScreen from '../screens/ManageSitesScreen';
 
-import { RootStackParamList } from '../types';
+import {RootStackParamList} from '../types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -24,25 +24,16 @@ export const RootNavigator = () => {
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
-          contentStyle: { backgroundColor: '#ffffff' },
+          contentStyle: {backgroundColor: '#ffffff'},
         }}>
         <Stack.Screen
           name="Splash"
           component={SplashScreen}
-          options={{ animation: 'none' }}
+          options={{animation: 'none'}}
         />
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-        />
-        <Stack.Screen
-          name="AdminDashboard"
-          component={AdminDashboardScreen}
-        />
-        <Stack.Screen
-          name="Register"
-          component={RegisterScreen}
-        />
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
+        <Stack.Screen name="Register" component={RegisterScreen} />
         <Stack.Screen
           name="ManageEmployees"
           component={ManageEmployeesScreen}
@@ -50,31 +41,25 @@ export const RootNavigator = () => {
         <Stack.Screen
           name="FaceAuth"
           component={FaceAuthScreen}
-          options={{ gestureEnabled: false }}
+          options={{gestureEnabled: false}}
         />
         <Stack.Screen
           name="Liveness"
           component={LivenessScreen}
-          options={{ gestureEnabled: false }}
+          options={{gestureEnabled: false}}
         />
         <Stack.Screen
           name="Recognition"
           component={RecognitionScreen}
-          options={{ gestureEnabled: false }}
+          options={{gestureEnabled: false}}
         />
         <Stack.Screen
           name="Result"
           component={ResultScreen}
-          options={{ gestureEnabled: false }}
+          options={{gestureEnabled: false}}
         />
-        <Stack.Screen
-          name="Sync"
-          component={SyncScreen}
-        />
-        <Stack.Screen
-          name="ManageSites"
-          component={ManageSitesScreen}
-        />
+        <Stack.Screen name="Sync" component={SyncScreen} />
+        <Stack.Screen name="ManageSites" component={ManageSitesScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

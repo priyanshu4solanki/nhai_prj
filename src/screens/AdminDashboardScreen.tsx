@@ -12,11 +12,16 @@ import {
 } from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {useFocusEffect} from '@react-navigation/native';
+import {useTranslation} from 'react-i18next';
+import {useLanguage} from '../contexts/LanguageContext';
 
 import {RootStackParamList} from '../types';
 import {COLORS, SIZES} from '../constants';
 import {globalStyles} from '../theme';
-import {getAllAttendanceRecords} from '../services/databaseService';
+import {
+  getAllAttendanceRecords,
+  getPendingSyncRecords,
+} from '../services/databaseService';
 import {runBackgroundSync} from '../services/syncService';
 
 type AdminDashboardProps = NativeStackScreenProps<
@@ -45,11 +50,14 @@ const formatDuration = (ms: number) => {
   }
   return parts.join(' ');
 };
-
 const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
   navigation,
   route,
 }) => {
+  const {t} = useTranslation();
+  const {changeLanguage, currentLanguage, supportedLanguages} = useLanguage();
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const adminUser = route?.params?.adminUser || 'Administrator';
   const [isModalSyncing, setIsModalSyncing] = useState(false);
   const [attendanceLogs, setAttendanceLogs] = useState<any[]>([]);
@@ -242,8 +250,19 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
   const loadStats = async () => {
     try {
       const all = await getAllAttendanceRecords(100);
-      console.log('ALL LOCAL ATTENDANCE RECORDS:', all.map(r => ({ id: r.id, uuid: r.uuid, check_type: r.check_type, synced: r.synced })));
+      console.log(
+        'ALL LOCAL ATTENDANCE RECORDS:',
+        all.map((r: any) => ({
+          id: r.id,
+          uuid: r.uuid,
+          check_type: r.check_type,
+          synced: r.synced,
+        })),
+      );
       setAttendanceLogs(all);
+
+      const pending = await getPendingSyncRecords();
+      setPendingCount(pending.length);
     } catch (e) {
       console.log('Error loading admin stats:', e);
     }
@@ -273,7 +292,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
         <View style={styles.groupedCardHeader}>
           <View style={{flex: 1}}>
             <Text style={styles.groupedEmpName}>{item.employee_name}</Text>
-            <Text style={styles.groupedEmpId}>ID: {item.employee_id}</Text>
+            <Text style={styles.groupedEmpId}>
+              {t('admin.idLabel')}
+              {item.employee_id}
+            </Text>
           </View>
         </View>
 
@@ -281,21 +303,23 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
 
         <View style={styles.logListBody}>
           <Text style={styles.groupedLocRow}>
-            📍 {item.site_name || 'Outside Geofence'}{' '}
+            📍 {item.site_name || t('result.outsideGeofence')}{' '}
             {item.location ? `(${item.location})` : ''}
           </Text>
 
           <View style={styles.groupedTimesRow}>
             <View style={styles.groupedTimeCol}>
-              <Text style={styles.groupedTimeLabel}>In</Text>
+              <Text style={styles.groupedTimeLabel}>{t('admin.inLabel')}</Text>
               <Text style={styles.groupedTimeVal}>{inTimeStr}</Text>
             </View>
             <View style={styles.groupedTimeCol}>
-              <Text style={styles.groupedTimeLabel}>Out</Text>
+              <Text style={styles.groupedTimeLabel}>{t('admin.outLabel')}</Text>
               <Text style={styles.groupedTimeVal}>{outTimeStr}</Text>
             </View>
             <View style={styles.groupedTimeCol}>
-              <Text style={styles.groupedTimeLabel}>Worked</Text>
+              <Text style={styles.groupedTimeLabel}>
+                {t('admin.workedLabel')}
+              </Text>
               <Text
                 style={[
                   styles.groupedTimeVal,
@@ -308,7 +332,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
 
           <View style={styles.groupedStatusRow}>
             <Text style={styles.groupedUuidText} numberOfLines={1}>
-              UUID: {item.uuid}
+              {t('admin.uuidLabel')}
+              {item.uuid}
             </Text>
             <View
               style={[
@@ -329,7 +354,9 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
                   styles.groupedStatusText,
                   {color: item.synced === 1 ? COLORS.success : COLORS.warning},
                 ]}>
-                {item.synced === 1 ? 'SYNCED' : 'PENDING'}
+                {item.synced === 1
+                  ? t('admin.syncedLabel')
+                  : t('admin.pendingLabel')}
               </Text>
             </View>
           </View>
@@ -340,22 +367,41 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
 
   return (
     <SafeAreaView style={[styles.container, globalStyles.container]}>
+      {/* Language Switcher Button */}
+      <TouchableOpacity
+        style={styles.languageButton}
+        onPress={() => setShowLanguageModal(true)}>
+        <Text style={styles.languageButtonText}>
+          🌐 {currentLanguage.toUpperCase()}
+        </Text>
+      </TouchableOpacity>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>
         {/* Admin Header */}
         <View style={styles.headerSection}>
           <View style={styles.adminBadge}>
-            <Text style={styles.adminBadgeText}>ADMIN</Text>
+            <Text style={styles.adminBadgeText}>{t('admin.badge')}</Text>
           </View>
-          <Text style={styles.headerTitle}>Admin Dashboard</Text>
-          <Text style={styles.headerSubtitle}>
-            National Highways Authority of India
-          </Text>
+          <Text style={styles.headerTitle}>{t('admin.title')}</Text>
+          <Text style={styles.headerSubtitle}>{t('appTitle')}</Text>
         </View>
 
+        {/* Quick Stats */}
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}>
+            <Text style={styles.statValue}>{pendingCount}</Text>
+            <Text style={styles.statLabel}>{t('sync.pendingRecords')}</Text>
+          </View>
+          <View style={[styles.statCard, styles.statCardAccent]}>
+            <Text style={[styles.statValue, {color: COLORS.white}]}>●</Text>
+            <Text style={[styles.statLabel, {color: 'rgba(255,255,255,0.8)'}]}>
+              {t('admin.systemActive')}
+            </Text>
+          </View>
+        </View>
         {/* Admin Actions */}
-        <Text style={styles.sectionTitle}>Administration</Text>
+        <Text style={styles.sectionTitle}>{t('admin.title')}</Text>
 
         {/* Register New Employee */}
         <TouchableOpacity
@@ -365,11 +411,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
             <Text style={styles.actionIcon}>👤</Text>
           </View>
           <View style={styles.actionContent}>
-            <Text style={styles.actionTitle}>Register New Employee</Text>
-            <Text style={styles.actionDesc}>
-              Capture facial embeddings and enroll a new employee for offline
-              attendance
+            <Text style={styles.actionTitle}>
+              {t('admin.registerNewEmployee')}
             </Text>
+            <Text style={styles.actionDesc}>{t('admin.registerDesc')}</Text>
           </View>
           <Text style={styles.actionArrow}>›</Text>
         </TouchableOpacity>
@@ -386,10 +431,28 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
             <Text style={styles.actionIcon}>👥</Text>
           </View>
           <View style={styles.actionContent}>
-            <Text style={styles.actionTitle}>Manage Employees</Text>
+            <Text style={styles.actionTitle}>{t('admin.manageEmployees')}</Text>
             <Text style={styles.actionDesc}>
-              View registered employees and remove those who have left
+              {t('admin.manageEmployeesDesc')}
             </Text>
+          </View>
+          <Text style={styles.actionArrow}>›</Text>
+        </TouchableOpacity>
+
+        {/* Configure Geofence Sites */}
+        <TouchableOpacity
+          style={styles.actionCard}
+          onPress={() => navigation.navigate('Sync', {})}>
+          <View
+            style={[
+              styles.actionIconContainer,
+              {backgroundColor: 'rgba(255, 152, 0, 0.12)'},
+            ]}>
+            <Text style={styles.actionIcon}>☁</Text>
+          </View>
+          <View style={styles.actionContent}>
+            <Text style={styles.actionTitle}>{t('sync.title')}</Text>
+            <Text style={styles.actionDesc}>{t('admin.syncDesc')}</Text>
           </View>
           <Text style={styles.actionArrow}>›</Text>
         </TouchableOpacity>
@@ -406,11 +469,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
             <Text style={styles.actionIcon}>📍</Text>
           </View>
           <View style={styles.actionContent}>
-            <Text style={styles.actionTitle}>Configure Geofence Sites</Text>
-            <Text style={styles.actionDesc}>
-              View, register, and modify project site coordinates and geofence
-              boundaries
-            </Text>
+            <Text style={styles.actionTitle}>{t('admin.manageSites')}</Text>
+            <Text style={styles.actionDesc}>{t('admin.manageSitesDesc')}</Text>
           </View>
           <Text style={styles.actionArrow}>›</Text>
         </TouchableOpacity>
@@ -427,10 +487,11 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
             <Text style={styles.actionIcon}>📅</Text>
           </View>
           <View style={styles.actionContent}>
-            <Text style={styles.actionTitle}>Employee Attendance</Text>
+            <Text style={styles.actionTitle}>
+              {t('admin.employeeAttendance')}
+            </Text>
             <Text style={styles.actionDesc}>
-              View and audit all employee check-in and check-out logs grouped by
-              day
+              {t('admin.employeeAttendanceDesc')}
             </Text>
           </View>
           <Text style={styles.actionArrow}>›</Text>
@@ -438,11 +499,11 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
 
         {/* Security Info */}
         <View style={styles.securityBox}>
-          <Text style={styles.securityTitle}>Security Notice</Text>
+          <Text style={styles.securityTitle}>
+            {t('admin.securityNoticeTitle')}
+          </Text>
           <Text style={styles.securityText}>
-            Only authenticated administrators can register new employees and
-            manage facial embeddings. All registration activity is logged
-            locally for audit compliance.
+            {t('admin.securityNoticeDesc')}
           </Text>
         </View>
       </ScrollView>
@@ -456,7 +517,9 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
         <SafeAreaView style={styles.logsModalContainer}>
           {/* Header */}
           <View style={styles.logsModalHeader}>
-            <Text style={styles.logsModalTitle}>Employee Attendance Audit</Text>
+            <Text style={styles.logsModalTitle}>
+              {t('admin.employeeAttendanceAudit')}
+            </Text>
             <TouchableOpacity onPress={() => setShowLogsModal(false)}>
               <Text style={styles.logsCloseBtnText}>✕</Text>
             </TouchableOpacity>
@@ -465,19 +528,23 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
           {/* Stats bar */}
           <View style={styles.logsStatsContainer}>
             <View style={styles.logsStatCard}>
-              <Text style={styles.logsStatTitle}>Total Check-ins</Text>
+              <Text style={styles.logsStatTitle}>
+                {t('sync.totalCheckIns')}
+              </Text>
               <Text style={[styles.logsStatValue, {color: COLORS.primary}]}>
                 {dayStats.checkIns}
               </Text>
             </View>
             <View style={styles.logsStatCard}>
-              <Text style={styles.logsStatTitle}>Total Check-outs</Text>
+              <Text style={styles.logsStatTitle}>
+                {t('sync.totalCheckOuts')}
+              </Text>
               <Text style={[styles.logsStatValue, {color: '#9c27b0'}]}>
                 {dayStats.checkOuts}
               </Text>
             </View>
             <View style={styles.logsStatCard}>
-              <Text style={styles.logsStatTitle}>Active Today</Text>
+              <Text style={styles.logsStatTitle}>{t('admin.activeToday')}</Text>
               <Text style={[styles.logsStatValue, {color: '#009688'}]}>
                 {dayStats.activeIds}
               </Text>
@@ -503,7 +570,11 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
                         styles.dayChipText,
                         isActive && styles.dayChipTextActive,
                       ]}>
-                      {day.label}
+                      {day.label === 'Today'
+                        ? t('sync.today')
+                        : day.label === 'Yesterday'
+                        ? t('sync.yesterday')
+                        : day.label}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -523,7 +594,9 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
               {isModalSyncing ? (
                 <ActivityIndicator size="small" color={COLORS.white} />
               ) : (
-                <Text style={styles.modalSyncBtnText}>🔄 Sync Hosted Data</Text>
+                <Text style={styles.modalSyncBtnText}>
+                  🔄 {t('admin.syncHostedData')}
+                </Text>
               )}
             </TouchableOpacity>
           </View>
@@ -542,7 +615,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
           ) : (
             <View style={styles.emptyLogsCard}>
               <Text style={styles.emptyLogsText}>
-                No attendance records found for this day.
+                {t('admin.noRecordsForDay')}
               </Text>
             </View>
           )}
@@ -552,7 +625,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
             style={styles.logsModalCloseButton}
             onPress={() => setShowLogsModal(false)}>
             <Text style={styles.logsModalCloseButtonText}>
-              Back to Dashboard
+              {t('admin.backToDashboard')}
             </Text>
           </TouchableOpacity>
         </SafeAreaView>
@@ -563,9 +636,58 @@ const AdminDashboardScreen: React.FC<AdminDashboardProps> = ({
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={() => navigation.navigate('Login')}>
-          <Text style={styles.logoutButtonText}>Logout</Text>
+          <Text style={styles.logoutButtonText}>{t('common.back')}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Language Selection Modal */}
+      <Modal
+        visible={showLanguageModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLanguageModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t('common.language')}</Text>
+
+            <FlatList
+              data={supportedLanguages}
+              keyExtractor={item => item.code}
+              scrollEnabled={false}
+              renderItem={({item}) => (
+                <TouchableOpacity
+                  style={[
+                    styles.languageOption,
+                    currentLanguage === item.code &&
+                      styles.languageOptionSelected,
+                  ]}
+                  onPress={async () => {
+                    await changeLanguage(item.code);
+                    setShowLanguageModal(false);
+                  }}>
+                  <Text
+                    style={[
+                      styles.languageOptionText,
+                      currentLanguage === item.code &&
+                        styles.languageOptionTextSelected,
+                    ]}>
+                    {item.name}
+                  </Text>
+                  {currentLanguage === item.code && (
+                    <Text style={styles.checkmark}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowLanguageModal(false)}>
+              <Text style={styles.closeButtonText}>{t('common.close')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -737,89 +859,108 @@ const styles = StyleSheet.create({
     fontSize: SIZES.base,
     fontWeight: '600',
   },
-  syncBanner: {
+  modalSyncBtn: {
+    backgroundColor: '#10b981',
     borderRadius: 10,
-    paddingHorizontal: SIZES.md,
-    paddingVertical: SIZES.sm,
-    marginBottom: SIZES.xl,
+    paddingVertical: SIZES.md,
+    justifyContent: 'center',
     alignItems: 'center',
+    minHeight: SIZES.buttonHeight,
+    elevation: 3,
+    shadowColor: '#0f172a',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
   },
-  syncBannerText: {
-    fontSize: SIZES.sm - 1,
+  modalSyncBtnDisabled: {
+    opacity: 0.65,
+  },
+  modalSyncBtnText: {
+    color: COLORS.white,
+    fontSize: SIZES.base,
     fontWeight: '700',
   },
-  logListItem: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: SIZES.md,
-    marginBottom: SIZES.md,
+  languageButton: {
+    alignSelf: 'flex-end',
+    marginRight: SIZES.lg,
+    marginTop: SIZES.md,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SIZES.sm,
+    paddingHorizontal: SIZES.md,
+    borderRadius: SIZES.md,
     elevation: 2,
     shadowColor: '#0f172a',
     shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
   },
-  logListHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  logEmpName: {
-    fontSize: SIZES.base + 1,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  logEmpId: {
+  languageButtonText: {
+    color: COLORS.white,
     fontSize: SIZES.sm,
-    color: COLORS.textSecondary,
-    marginTop: 2,
+    fontWeight: '600',
   },
-  badgeContainer: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.5,
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.lg,
+    padding: SIZES.lg,
+    width: '80%',
+    maxWidth: 320,
+    elevation: 5,
+    shadowColor: '#0f172a',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
   },
-  logListDivider: {
-    height: 1,
-    backgroundColor: '#f1f5f9',
+  modalTitle: {
+    fontSize: SIZES.lg,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SIZES.lg,
+    textAlign: 'center',
+  },
+  languageOption: {
+    paddingVertical: SIZES.md,
+    paddingHorizontal: SIZES.md,
     marginVertical: SIZES.sm,
-  },
-  logListBody: {
-    flexDirection: 'column',
-  },
-  logLocText: {
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    fontWeight: '500',
-    marginBottom: 8,
-  },
-  logTimesRow: {
+    borderRadius: SIZES.md,
+    backgroundColor: COLORS.gray100,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  logTimeCol: {
-    flexDirection: 'column',
-    alignItems: 'flex-start',
+  languageOptionSelected: {
+    backgroundColor: COLORS.primary,
   },
-  logTimeLabel: {
-    fontSize: 9,
-    color: COLORS.textTertiary,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  logTimeVal: {
-    fontSize: 11,
+  languageOptionText: {
+    fontSize: SIZES.base,
     color: COLORS.text,
-    fontWeight: '500',
+  },
+  languageOptionTextSelected: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+  },
+  checkmark: {
+    color: COLORS.white,
+    fontSize: SIZES.lg,
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    marginTop: SIZES.lg,
+    paddingVertical: SIZES.md,
+    backgroundColor: COLORS.gray100,
+    borderRadius: SIZES.md,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: COLORS.primary,
+    fontSize: SIZES.base,
+    fontWeight: '600',
   },
   emptyLogsCard: {
     backgroundColor: COLORS.white,
@@ -909,6 +1050,14 @@ const styles = StyleSheet.create({
     shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.04,
     shadowRadius: 3,
+  },
+  logListDivider: {
+    height: 1,
+    backgroundColor: '#e2e8f0',
+    marginVertical: SIZES.sm,
+  },
+  logListBody: {
+    flex: 1,
   },
   groupedCardHeader: {
     flexDirection: 'row',
@@ -1030,27 +1179,6 @@ const styles = StyleSheet.create({
   },
   dayChipTextActive: {
     color: COLORS.white,
-    fontWeight: '700',
-  },
-  modalSyncBtn: {
-    backgroundColor: '#10b981',
-    borderRadius: 10,
-    paddingVertical: SIZES.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-    minHeight: SIZES.buttonHeight,
-    elevation: 3,
-    shadowColor: '#0f172a',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-  },
-  modalSyncBtnDisabled: {
-    opacity: 0.65,
-  },
-  modalSyncBtnText: {
-    color: COLORS.white,
-    fontSize: SIZES.base,
     fontWeight: '700',
   },
 });

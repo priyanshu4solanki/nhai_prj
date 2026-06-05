@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, {useState, useRef} from 'react';
 import {
   View,
   Text,
@@ -10,50 +10,36 @@ import {
   ActivityIndicator,
   Dimensions,
 } from 'react-native';
-import { RNCamera } from 'react-native-camera';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import {RNCamera} from 'react-native-camera';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 
-import { RootStackParamList } from '../types';
-import { COLORS, SIZES, STRINGS } from '../constants';
-import { globalStyles } from '../theme';
-import { insertOrUpdateEmployee } from '../services/databaseService';
-import { generateRandomFaceVector, validateEmployeeId, computeFaceVector } from '../utils';
+import {RootStackParamList} from '../types';
+import {COLORS, SIZES} from '../constants';
+import {globalStyles} from '../theme';
+import {insertOrUpdateEmployee} from '../services/databaseService';
+import {validateEmployeeId, computeFaceVector} from '../utils';
+import {useTranslation} from 'react-i18next';
 
-type RegisterScreenProps = NativeStackScreenProps<RootStackParamList, 'Register'>;
+type RegisterScreenProps = NativeStackScreenProps<
+  RootStackParamList,
+  'Register'
+>;
 
 // Hardcoded admin username for verification
 const ADMIN_USERNAME = 'Priyanshu solanki';
 
 const DEPARTMENTS = [
-  { label: 'Engineering', value: 'engineering' },
-  { label: 'Administration', value: 'admin' },
-  { label: 'Finance', value: 'finance' },
-  { label: 'HR', value: 'hr' },
-  { label: 'Operations', value: 'operations' },
+  {label: 'Engineering', value: 'engineering'},
+  {label: 'Administration', value: 'admin'},
+  {label: 'Finance', value: 'finance'},
+  {label: 'HR', value: 'hr'},
+  {label: 'Operations', value: 'operations'},
 ];
 
-const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) => {
+const RegisterScreen: React.FC<RegisterScreenProps> = ({navigation, route}) => {
+  const {t} = useTranslation();
   const adminUser = route?.params?.adminUser;
-  
-  // Verify admin access
-  if (!adminUser || adminUser !== ADMIN_USERNAME) {
-    return (
-      <SafeAreaView style={[styles.container, globalStyles.container]}>
-        <View style={styles.unauthorizedContainer}>
-          <Text style={styles.unauthorizedIcon}>🔒</Text>
-          <Text style={styles.unauthorizedTitle}>Access Denied</Text>
-          <Text style={styles.unauthorizedText}>
-            Only authorized administrators can register new employees.
-          </Text>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
+
   const [employeeId, setEmployeeId] = useState('');
   const [name, setName] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('');
@@ -66,11 +52,35 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
   // Real-time face tracking state
   const [detectedFace, setDetectedFace] = useState<any>(null);
   const [isAligned, setIsAligned] = useState(false);
-  const [cameraInstruction, setCameraInstruction] = useState('Align face inside the oval frame');
+  const [cameraInstruction, setCameraInstruction] = useState(
+    'Align face inside the oval frame',
+  );
 
   const cameraRef = useRef<RNCamera | null>(null);
 
-  const handleFacesDetected = ({ faces }: { faces: any[] }) => {
+  // Verify admin access
+  if (!adminUser || adminUser !== ADMIN_USERNAME) {
+    return (
+      <SafeAreaView style={[styles.container, globalStyles.container]}>
+        <View style={styles.unauthorizedContainer}>
+          <Text style={styles.unauthorizedIcon}>🔒</Text>
+          <Text style={styles.unauthorizedTitle}>
+            {t('register.accessDenied')}
+          </Text>
+          <Text style={styles.unauthorizedText}>
+            {t('register.onlyAdminsCanRegister')}
+          </Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>{t('common.back')}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const handleFacesDetected = ({faces}: {faces: any[]}) => {
     if (faces.length === 0) {
       setIsAligned(false);
       setCameraInstruction('No face detected. Look directly into camera.');
@@ -88,7 +98,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
     const face = faces[0];
     setDetectedFace(face);
 
-    const { origin, size } = face.bounds;
+    const {origin, size} = face.bounds;
     const screenWidth = Dimensions.get('window').width;
     const screenHeight = Dimensions.get('window').height;
 
@@ -117,7 +127,9 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
         setCameraInstruction('Perfect! Hold still and tap Capture.');
         setIsAligned(true);
       } else {
-        setCameraInstruction('Look straight, ensure eyes and mouth are visible');
+        setCameraInstruction(
+          'Look straight, ensure eyes and mouth are visible',
+        );
         setIsAligned(false);
       }
     }
@@ -127,22 +139,22 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
     setError('');
 
     if (!employeeId.trim()) {
-      setError('Please enter Employee ID');
+      setError(t('errors.enterEmployeeId'));
       return;
     }
 
     if (!validateEmployeeId(employeeId)) {
-      setError('Invalid Employee ID format (3-20 characters, letters/numbers and hyphen allowed)');
+      setError(t('errors.invalidEmployeeIdFormat'));
       return;
     }
 
     if (!name.trim()) {
-      setError('Please enter Full Name');
+      setError(t('errors.enterFullName'));
       return;
     }
 
     if (!selectedDepartment) {
-      setError('Please select a department');
+      setError(t('login.selectDepartment'));
       return;
     }
 
@@ -150,16 +162,22 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
   };
 
   const handleCaptureAndRegister = async () => {
-    if (isLoading) return;
+    if (isLoading) {
+      return;
+    }
     setError('');
 
     if (!detectedFace) {
-      setError('No face detected in camera frame. Please align face before capturing.');
+      setError(
+        'No face detected in camera frame. Please align face before capturing.',
+      );
       return;
     }
 
     if (!isAligned) {
-      setError('Face is not properly aligned. Please center face inside the oval.');
+      setError(
+        'Face is not properly aligned. Please center face inside the oval.',
+      );
       return;
     }
 
@@ -173,7 +191,9 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
       const faceVector = computeFaceVector(detectedFace);
 
       if (!faceVector) {
-        setError('Failed to extract facial features. Ensure good lighting and look straight.');
+        setError(
+          'Failed to extract facial features. Ensure good lighting and look straight.',
+        );
         setIsLoading(false);
         return;
       }
@@ -191,12 +211,17 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
         setSuccess(true);
         setShowCamera(false);
       } else {
-        const errorMsg = typeof result.error === 'string' ? result.error : (result.error as any)?.message || JSON.stringify(result.error) || 'Unknown Database Error';
-        setError(`Database error: Failed to save employee records. (${errorMsg})`);
+        const errorMsg =
+          typeof result.error === 'string'
+            ? result.error
+            : (result.error as any)?.message ||
+              JSON.stringify(result.error) ||
+              'Unknown Database Error';
+        setError(t('errors.databaseSaveFailed', {error: errorMsg}));
       }
     } catch (err: any) {
       console.error('Registration error:', err);
-      setError(`Failed to complete registration: ${err?.message || err}`);
+      setError(t('errors.registrationFailed', {error: err?.message || err}));
     } finally {
       setIsLoading(false);
     }
@@ -209,30 +234,38 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
           <View style={styles.successBadge}>
             <Text style={styles.successBadgeText}>✓</Text>
           </View>
-          <Text style={styles.successTitle}>Registration Successful</Text>
+          <Text style={styles.successTitle}>{t('register.successTitle')}</Text>
           <Text style={styles.successText}>
-            Employee ID <Text style={{ fontWeight: '700', color: COLORS.text }}>{employeeId.toUpperCase()}</Text> is now registered offline in the Datalake 3.0 secure storage.
+            {t('register.successMessage', {id: employeeId.toUpperCase()})}
           </Text>
           <View style={styles.receiptContainer}>
             <View style={styles.receiptRow}>
-              <Text style={styles.receiptLabel}>Name:</Text>
+              <Text style={styles.receiptLabel}>{t('register.nameLabel')}</Text>
               <Text style={styles.receiptValue}>{name}</Text>
             </View>
             <View style={styles.receiptRow}>
-              <Text style={styles.receiptLabel}>Department:</Text>
+              <Text style={styles.receiptLabel}>
+                {t('login.departmentLabel')}
+              </Text>
               <Text style={styles.receiptValue}>
-                {DEPARTMENTS.find(d => d.value === selectedDepartment)?.label}
+                {t(`departments.${selectedDepartment}`)}
               </Text>
             </View>
             <View style={styles.receiptRow}>
-              <Text style={styles.receiptLabel}>Facial Embedding:</Text>
-              <Text style={styles.receiptValue}>128-dim Normalized (Stored)</Text>
+              <Text style={styles.receiptLabel}>
+                {t('register.facialEmbeddingLabel')}
+              </Text>
+              <Text style={styles.receiptValue}>
+                {t('register.embeddingStored')}
+              </Text>
             </View>
           </View>
           <TouchableOpacity
             style={styles.doneButton}
             onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.doneButtonText}>Back to Login</Text>
+            <Text style={styles.doneButtonText}>
+              {t('register.backToLogin')}
+            </Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -248,16 +281,19 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
           type={RNCamera.Constants.Type.front}
           flashMode={RNCamera.Constants.FlashMode.off}
           captureAudio={false}
-          faceDetectorEnabled={true}
           faceDetectionMode={RNCamera.Constants.FaceDetection.Mode.accurate}
-          faceDetectionLandmarks={RNCamera.Constants.FaceDetection.Landmarks.all}
-          faceDetectionClassifications={RNCamera.Constants.FaceDetection.Classifications.all}
+          faceDetectionLandmarks={
+            RNCamera.Constants.FaceDetection.Landmarks.all
+          }
+          faceDetectionClassifications={
+            RNCamera.Constants.FaceDetection.Classifications.all
+          }
           onFacesDetected={handleFacesDetected}
           androidCameraPermissionOptions={{
-            title: 'Camera Permission',
-            message: 'We need camera permission for offline face capture.',
-            buttonPositive: 'OK',
-            buttonNegative: 'Cancel',
+            title: t('common.cameraPermissionTitle'),
+            message: t('common.cameraPermissionMessage'),
+            buttonPositive: t('common.ok'),
+            buttonNegative: t('common.cancel'),
           }}
         />
 
@@ -266,13 +302,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
           <View
             style={[
               styles.ovalHole,
-              isAligned && { borderColor: COLORS.success }
+              isAligned && {borderColor: COLORS.success},
             ]}
           />
           <View style={styles.guideContainer}>
-            <Text style={styles.cameraGuideText}>
-              {cameraInstruction}
-            </Text>
+            <Text style={styles.cameraGuideText}>{cameraInstruction}</Text>
           </View>
         </View>
 
@@ -282,14 +316,11 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
             style={styles.cancelCaptureButton}
             onPress={() => setShowCamera(false)}
             disabled={isLoading}>
-            <Text style={styles.cancelCaptureText}>Cancel</Text>
+            <Text style={styles.cancelCaptureText}>{t('common.cancel')}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[
-              styles.captureActionButton,
-              !isAligned && { opacity: 0.5 }
-            ]}
+            style={[styles.captureActionButton, !isAligned && {opacity: 0.5}]}
             onPress={handleCaptureAndRegister}
             disabled={isLoading || !isAligned}>
             {isLoading ? (
@@ -299,7 +330,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
             )}
           </TouchableOpacity>
 
-          <View style={{ width: 70 }} />
+          <View style={{width: 70}} />
         </View>
       </SafeAreaView>
     );
@@ -307,23 +338,23 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
 
   return (
     <SafeAreaView style={[styles.container, globalStyles.container]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.headerContainer}>
-          <Text style={styles.headerTitle}>Offline Registration</Text>
-          <Text style={styles.headerSubtitle}>
-            Register employee facial credentials securely onto this device
-          </Text>
+          <Text style={styles.headerTitle}>{t('register.title')}</Text>
+          <Text style={styles.headerSubtitle}>{t('register.subtitle')}</Text>
         </View>
 
         {/* Form */}
         <View style={styles.formContainer}>
           {/* Employee ID */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Employee ID</Text>
+            <Text style={styles.label}>{t('login.employeeIdLabel')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. NHAI-104"
+              placeholder={t('register.employeeIdPlaceholder')}
               value={employeeId}
               onChangeText={text => {
                 setEmployeeId(text.toUpperCase());
@@ -335,10 +366,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
 
           {/* Full Name */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Full Name</Text>
+            <Text style={styles.label}>{t('register.fullNameLabel')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g. Rajesh Kumar"
+              placeholder={t('register.fullNamePlaceholder')}
               value={name}
               onChangeText={text => {
                 setName(text);
@@ -350,18 +381,18 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
 
           {/* Department */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Department</Text>
+            <Text style={styles.label}>{t('login.departmentLabel')}</Text>
             <TouchableOpacity
               style={styles.departmentButton}
               onPress={() => setShowDepartmentPicker(!showDepartmentPicker)}>
               <Text
                 style={[
                   styles.departmentButtonText,
-                  !selectedDepartment && { color: COLORS.textTertiary },
+                  !selectedDepartment && {color: COLORS.textTertiary},
                 ]}>
                 {selectedDepartment
-                  ? DEPARTMENTS.find(d => d.value === selectedDepartment)?.label
-                  : 'Select Department'}
+                  ? t(`departments.${selectedDepartment}`)
+                  : t('login.selectDepartmentPlaceholder')}
               </Text>
             </TouchableOpacity>
 
@@ -372,7 +403,8 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
                     key={dept.value}
                     style={[
                       styles.departmentOption,
-                      selectedDepartment === dept.value && styles.departmentOptionSelected,
+                      selectedDepartment === dept.value &&
+                        styles.departmentOptionSelected,
                     ]}
                     onPress={() => {
                       setSelectedDepartment(dept.value);
@@ -382,9 +414,10 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
                     <Text
                       style={[
                         styles.departmentOptionText,
-                        selectedDepartment === dept.value && styles.departmentOptionTextSelected,
+                        selectedDepartment === dept.value &&
+                          styles.departmentOptionTextSelected,
                       ]}>
-                      {dept.label}
+                      {t(`departments.${dept.value}`)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -400,12 +433,18 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
           ) : null}
 
           {/* Proceed to Capture Button */}
-          <TouchableOpacity style={styles.proceedButton} onPress={handleStartCapture}>
-            <Text style={styles.proceedButtonText}>Capture Facial Embedding</Text>
+          <TouchableOpacity
+            style={styles.proceedButton}
+            onPress={handleStartCapture}>
+            <Text style={styles.proceedButtonText}>
+              {t('register.captureButton')}
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Text style={styles.backButtonText}>Cancel</Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}>
+            <Text style={styles.backButtonText}>{t('common.cancel')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -413,7 +452,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation, route }) =>
   );
 };
 
-const { width, height } = Dimensions.get('window');
+const {width, height} = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {
@@ -455,7 +494,7 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: '#cbd5e1', // Slate-300 border
-    borderRadius: 10,       // Smoother rounded corners
+    borderRadius: 10, // Smoother rounded corners
     paddingHorizontal: SIZES.md,
     paddingVertical: SIZES.md,
     fontSize: SIZES.base,
@@ -484,7 +523,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 4,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.08,
     shadowRadius: 5,
   },
@@ -529,7 +568,7 @@ const styles = StyleSheet.create({
     marginTop: SIZES.lg,
     elevation: 3,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.12,
     shadowRadius: 4,
   },
@@ -630,7 +669,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 8,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: {width: 0, height: 4},
     shadowOpacity: 0.15,
     shadowRadius: 10,
   },

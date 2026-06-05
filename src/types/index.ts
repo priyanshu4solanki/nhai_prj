@@ -2,21 +2,21 @@
 export type RootStackParamList = {
   Splash: undefined;
   Login: undefined;
-  AdminDashboard: { adminUser?: string };
-  Register: { adminUser?: string };
-  ManageEmployees: { adminUser?: string };
-  FaceAuth: { employeeId: string; department: string };
-  Liveness: { employeeId: string; department: string; faceVector?: number[] };
-  Recognition: { employeeId: string; department: string; faceVector?: number[] };
+  AdminDashboard: {adminUser?: string};
+  Register: {adminUser?: string};
+  ManageEmployees: {adminUser?: string};
+  FaceAuth: {employeeId: string; department: string};
+  Liveness: {employeeId: string; department: string; faceVector?: number[]};
+  Recognition: {employeeId: string; department: string; faceVector?: number[]};
   Result: {
     employeeId: string;
     status: 'success' | 'failure';
     message?: string;
     timestamp?: number;
   };
-  Sync: { employeeId?: string };
+  Sync: {employeeId?: string};
   Home: undefined;
-  ManageSites: { adminUser?: string };
+  ManageSites: {adminUser?: string};
 };
 
 // Face detection and recognition types
@@ -30,10 +30,10 @@ export interface FaceDetectionResult {
 }
 
 export interface FaceLandmarks {
-  leftEye: { x: number; y: number };
-  rightEye: { x: number; y: number };
-  nose: { x: number; y: number };
-  mouth: { x: number; y: number };
+  leftEye: {x: number; y: number};
+  rightEye: {x: number; y: number};
+  nose: {x: number; y: number};
+  mouth: {x: number; y: number};
   confidence: number;
 }
 

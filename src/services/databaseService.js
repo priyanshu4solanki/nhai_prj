@@ -326,9 +326,7 @@ async function runSelfTest() {
 // Seed default sites
 const seedDefaultSites = async () => {
   try {
-    const [result] = await db.executeSql(
-      'SELECT COUNT(*) as count FROM sites',
-    );
+    const [result] = await db.executeSql('SELECT COUNT(*) as count FROM sites');
     const rows = extractRows(result);
     const count = rows[0]?.count || 0;
 
@@ -492,7 +490,10 @@ export const insertAttendanceRecord = async record => {
     return {success: true, message: 'Attendance recorded'};
   } catch (error) {
     console.log('Error inserting attendance:', error);
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -595,7 +596,10 @@ export const deleteAttendanceRecord = async recordUuid => {
     return {success: true};
   } catch (error) {
     console.log('Error deleting attendance record:', error);
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -606,7 +610,8 @@ export const insertOrUpdateEmployee = async (employee, synced = 0) => {
   }
 
   try {
-    const {id, name, department, photoPath, faceVector, createdAt, updatedAt} = employee;
+    const {id, name, department, photoPath, faceVector, createdAt, updatedAt} =
+      employee;
 
     await db.executeSql(
       `INSERT OR REPLACE INTO employees (
@@ -627,7 +632,10 @@ export const insertOrUpdateEmployee = async (employee, synced = 0) => {
     return {success: true};
   } catch (error) {
     console.log('Error saving employee:', error);
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -704,7 +712,10 @@ export const deleteEmployee = async employeeId => {
     };
   } catch (error) {
     console.log('Error deleting employee:', error);
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -728,7 +739,10 @@ export const startSession = async (employeeId, department, siteId) => {
     return {success: true};
   } catch (error) {
     console.log('Error starting session:', error);
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -745,12 +759,18 @@ export const insertSite = async site => {
     try {
       const columns = await getTableColumns('sites');
       if (!columns.includes('geofence_type')) {
-        console.log('Self-healing: sites table is missing geofence_type. Altering table...');
-        await db.executeSql("ALTER TABLE sites ADD COLUMN geofence_type TEXT DEFAULT 'circular'");
+        console.log(
+          'Self-healing: sites table is missing geofence_type. Altering table...',
+        );
+        await db.executeSql(
+          "ALTER TABLE sites ADD COLUMN geofence_type TEXT DEFAULT 'circular'",
+        );
       }
       if (!columns.includes('created_at')) {
-        console.log('Self-healing: sites table is missing created_at. Altering table...');
-        await db.executeSql("ALTER TABLE sites ADD COLUMN created_at INTEGER");
+        console.log(
+          'Self-healing: sites table is missing created_at. Altering table...',
+        );
+        await db.executeSql('ALTER TABLE sites ADD COLUMN created_at INTEGER');
       }
     } catch (colErr) {
       console.log('Self-healing column check/add error (non-fatal):', colErr);
@@ -778,7 +798,10 @@ export const insertSite = async site => {
       const columns = await getTableColumns('sites');
       console.log('Columns in sites table on insert failure:', columns);
     } catch (colErr) {}
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -813,7 +836,10 @@ export const deleteSite = async siteId => {
     };
   } catch (error) {
     console.log('Error deleting site:', error);
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -831,7 +857,10 @@ export const endSession = async employeeId => {
     return {success: true};
   } catch (error) {
     console.log('Error ending session:', error);
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -877,7 +906,10 @@ export const addToSyncQueue = async attendanceRecord => {
     return {success: true};
   } catch (error) {
     console.log('Error adding to sync queue:', error);
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -913,7 +945,10 @@ export const clearSyncQueue = async () => {
     return {success: true};
   } catch (error) {
     console.log('Error clearing sync queue:', error);
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -925,7 +960,7 @@ export const getPendingSyncEmployees = async () => {
 
   try {
     const [result] = await db.executeSql(
-      'SELECT * FROM employees WHERE synced = 0'
+      'SELECT * FROM employees WHERE synced = 0',
     );
 
     const rows = extractRows(result);
@@ -951,10 +986,9 @@ export const markEmployeeAsSynced = async employeeId => {
   }
 
   try {
-    await db.executeSql(
-      'UPDATE employees SET synced = 1 WHERE id = ?',
-      [employeeId]
-    );
+    await db.executeSql('UPDATE employees SET synced = 1 WHERE id = ?', [
+      employeeId,
+    ]);
 
     return {success: true};
   } catch (error) {
@@ -977,8 +1011,10 @@ export const insertSyncedAttendance = async record => {
     const loc = record.location;
     const verified = record.verified !== undefined ? record.verified : 1;
     const faceConf = record.face_confidence || record.faceConfidence || 0;
-    const livenessConf = record.liveness_confidence || record.livenessConfidence || 0;
-    const recogConf = record.recognition_confidence || record.recognitionConfidence || 0;
+    const livenessConf =
+      record.liveness_confidence || record.livenessConfidence || 0;
+    const recogConf =
+      record.recognition_confidence || record.recognitionConfidence || 0;
     const siteId = record.site_id || record.siteId;
     const duration = record.duration || 0;
     const createdAt = record.created_at || record.createdAt || Date.now();
@@ -1011,7 +1047,10 @@ export const insertSyncedAttendance = async record => {
     return {success: true};
   } catch (error) {
     console.log('Error inserting synced attendance record:', error);
-    return {success: false, error: error?.message || error?.toString() || error};
+    return {
+      success: false,
+      error: error?.message || error?.toString() || error,
+    };
   }
 };
 
@@ -1031,11 +1070,18 @@ export const hasCompletedAttendanceToday = async employeeId => {
       [employeeId, startOfDayMs, endOfDayMs],
     );
     const rows = extractRows(result);
-    const hasCheckIn = rows.some(r => r.check_type === 'check-in' || r.check_type === 'check_in');
-    const hasCheckOut = rows.some(r => r.check_type === 'check-out' || r.check_type === 'check_out');
+    const hasCheckIn = rows.some(
+      r => r.check_type === 'check-in' || r.check_type === 'check_in',
+    );
+    const hasCheckOut = rows.some(
+      r => r.check_type === 'check-out' || r.check_type === 'check_out',
+    );
     return hasCheckIn && hasCheckOut;
   } catch (error) {
-    console.log('Error checking if employee completed attendance today:', error);
+    console.log(
+      'Error checking if employee completed attendance today:',
+      error,
+    );
     return false;
   }
 };

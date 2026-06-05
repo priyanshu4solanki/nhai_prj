@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, {useState, useRef} from 'react';
 import {
   View,
   Text,
@@ -11,20 +11,28 @@ import {
   Alert,
   FlatList,
 } from 'react-native';
-import { WebView } from 'react-native-webview';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
+import {WebView} from 'react-native-webview';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {useFocusEffect} from '@react-navigation/native';
 
-import { RootStackParamList } from '../types';
-import { COLORS, SIZES } from '../constants';
-import { globalStyles } from '../theme';
-import { getAllSites, insertSite, deleteSite } from '../services/databaseService';
+import {RootStackParamList} from '../types';
+import {COLORS, SIZES} from '../constants';
+import {globalStyles} from '../theme';
+import {getAllSites, insertSite, deleteSite} from '../services/databaseService';
+import {useTranslation} from 'react-i18next';
 
-type ManageSitesScreenProps = NativeStackScreenProps<RootStackParamList, 'ManageSites'>;
+type ManageSitesScreenProps = NativeStackScreenProps<
+  RootStackParamList,
+  'ManageSites'
+>;
 
-const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route }) => {
+const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({
+  navigation,
+  route,
+}) => {
+  const {t} = useTranslation();
   const adminUser = route?.params?.adminUser;
-  
+
   const [sites, setSites] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -34,7 +42,9 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
   const [radius, setRadius] = useState('200'); // Default to 200m
-  const [geofenceType, setGeofenceType] = useState<'circular' | 'square'>('circular');
+  const [geofenceType, setGeofenceType] = useState<'circular' | 'square'>(
+    'circular',
+  );
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const webViewRef = useRef<WebView>(null);
@@ -44,126 +54,7 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Verify admin access
-  if (!adminUser || adminUser !== 'Priyanshu solanki') {
-    return (
-      <SafeAreaView style={[styles.container, globalStyles.container]}>
-        <View style={styles.unauthorizedContainer}>
-          <Text style={styles.unauthorizedIcon}>🔒</Text>
-          <Text style={styles.unauthorizedTitle}>Access Denied</Text>
-          <Text style={styles.unauthorizedText}>
-            Only authorized administrators can configure geofence sites.
-          </Text>
-          <TouchableOpacity
-            style={[styles.backBtn, { width: '80%', alignSelf: 'center' }]}
-            onPress={() => navigation.goBack()}>
-            <Text style={styles.backBtnText}>Go Back</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  useFocusEffect(
-    React.useCallback(() => {
-      loadSites();
-    }, [])
-  );
-
-  const performSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-    setSearchResults([]);
-    
-    try {
-      let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(searchQuery)}&limit=10&countrycode=in`;
-      
-      // If we have center coordinates already, apply location bias
-      if (latitude && longitude) {
-        url += `&lat=${parseFloat(latitude)}&lon=${parseFloat(longitude)}&location_bias_scale=0.2`;
-      }
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP status ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data && data.features) {
-        const mappedResults = data.features.map((feature: any) => {
-          const props = feature.properties || {};
-          const name = props.name || props.street || '';
-          
-          // Construct details: "city, state, country"
-          const detailsArray = [
-            props.city || props.town || props.district,
-            props.state,
-            props.country,
-          ].filter(Boolean);
-          
-          const details = detailsArray.join(', ');
-          const displayName = name 
-            ? (details ? `${name}, ${details}` : name)
-            : details || 'Unknown Location';
-            
-          const lon = feature.geometry.coordinates[0];
-          const lat = feature.geometry.coordinates[1];
-          
-          return {
-            display_name: displayName,
-            lat: lat.toString(),
-            lon: lon.toString(),
-          };
-        });
-        
-        setSearchResults(mappedResults);
-        if (mappedResults.length === 0) {
-          Alert.alert('Location Not Found', 'No matches found in India for your search query. Try typing a highway, landmark, or city name (e.g. Dwarka Expressway).');
-        }
-      } else {
-        setSearchResults([]);
-        Alert.alert('Location Not Found', 'No matches found in India for your search query.');
-      }
-    } catch (err: any) {
-      console.error('Search error:', err);
-      Alert.alert('Search Error', `Search failed: ${err.message || err}. Tap directly on the map if search is unavailable.`);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  const selectSearchResult = (item: any) => {
-    const lat = parseFloat(item.lat);
-    const lon = parseFloat(item.lon);
-    
-    setLatitude(lat.toFixed(6));
-    setLongitude(lon.toFixed(6));
-    
-    setSearchResults([]);
-    setSearchQuery(item.display_name);
-
-    if (webViewRef.current) {
-      webViewRef.current.postMessage(
-        JSON.stringify({
-          type: 'PAN_TO',
-          latitude: lat,
-          longitude: lon,
-        })
-      );
-      
-      // Inject JS directly to ensure immediate pan/marker updates on Android
-      webViewRef.current.injectJavaScript(`
-        if (typeof updateMarker === 'function' && typeof map !== 'undefined') {
-          updateMarker(${lat}, ${lon});
-          map.setView([${lat}, ${lon}], 15);
-        }
-        true;
-      `);
-    }
-  };
-
-  const loadSites = async () => {
+  const loadSites = React.useCallback(async () => {
     setIsLoading(true);
     setError('');
     try {
@@ -174,6 +65,146 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
       setError('Failed to load sites from local database');
     } finally {
       setIsLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (adminUser === 'Priyanshu solanki') {
+        loadSites();
+      }
+    }, [adminUser, loadSites]),
+  );
+
+  // Verify admin access
+  if (!adminUser || adminUser !== 'Priyanshu solanki') {
+    return (
+      <SafeAreaView style={[styles.container, globalStyles.container]}>
+        <View style={styles.unauthorizedContainer}>
+          <Text style={styles.unauthorizedIcon}>🔒</Text>
+          <Text style={styles.unauthorizedTitle}>
+            {t('register.accessDenied')}
+          </Text>
+          <Text style={styles.unauthorizedText}>
+            {t('admin.onlyAdminsCanConfigureSites')}
+          </Text>
+          <TouchableOpacity
+            style={[styles.backBtn, {width: '80%', alignSelf: 'center'}]}
+            onPress={() => navigation.goBack()}>
+            <Text style={styles.backBtnText}>{t('common.back')}</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const performSearch = async () => {
+    if (!searchQuery.trim()) {
+      return;
+    }
+    setIsSearching(true);
+    setSearchResults([]);
+
+    try {
+      let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(
+        searchQuery,
+      )}&limit=10&countrycode=in`;
+
+      // If we have center coordinates already, apply location bias
+      if (latitude && longitude) {
+        url += `&lat=${parseFloat(latitude)}&lon=${parseFloat(
+          longitude,
+        )}&location_bias_scale=0.2`;
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP status ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data && data.features) {
+        const mappedResults = data.features.map((feature: any) => {
+          const props = feature.properties || {};
+          const name = props.name || props.street || '';
+
+          // Construct details: "city, state, country"
+          const detailsArray = [
+            props.city || props.town || props.district,
+            props.state,
+            props.country,
+          ].filter(Boolean);
+
+          const details = detailsArray.join(', ');
+          const displayName = name
+            ? details
+              ? `${name}, ${details}`
+              : name
+            : details || 'Unknown Location';
+
+          const lon = feature.geometry.coordinates[0];
+          const lat = feature.geometry.coordinates[1];
+
+          return {
+            display_name: displayName,
+            lat: lat.toString(),
+            lon: lon.toString(),
+          };
+        });
+
+        setSearchResults(mappedResults);
+        if (mappedResults.length === 0) {
+          Alert.alert(
+            t('errors.locationNotFoundTitle'),
+            t('errors.noLocationMatches'),
+          );
+        }
+      } else {
+        setSearchResults([]);
+        Alert.alert(
+          t('errors.locationNotFoundTitle'),
+          t('errors.noLocationMatches'),
+        );
+      }
+    } catch (err: any) {
+      console.error('Search error:', err);
+      Alert.alert(
+        t('errors.searchErrorTitle'),
+        t('errors.searchFailed', {error: err.message || err}),
+      );
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const selectSearchResult = (item: any) => {
+    const lat = parseFloat(item.lat);
+    const lon = parseFloat(item.lon);
+
+    setLatitude(lat.toFixed(6));
+    setLongitude(lon.toFixed(6));
+
+    setSearchResults([]);
+    setSearchQuery(item.display_name);
+
+    if (webViewRef.current) {
+      webViewRef.current.postMessage(
+        JSON.stringify({
+          type: 'PAN_TO',
+          latitude: lat,
+          longitude: lon,
+        }),
+      );
+
+      // Inject JS directly to ensure immediate pan/marker updates on Android
+      webViewRef.current.injectJavaScript(`
+        if (typeof updateMarker === 'function' && typeof map !== 'undefined') {
+          updateMarker(${lat}, ${lon});
+          map.setView([${lat}, ${lon}], 15);
+        }
+        true;
+      `);
     }
   };
 
@@ -189,11 +220,17 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
         setSearchResults(data.results || []);
         setIsSearching(false);
         if (!data.results || data.results.length === 0) {
-          Alert.alert('Location Not Found', 'No matches found in India for your search query. Try typing a city or highway name (e.g. Dwarka Expressway).');
+          Alert.alert(
+            t('errors.locationNotFoundTitle'),
+            t('errors.noLocationMatches'),
+          );
         }
       } else if (data.type === 'SEARCH_ERROR') {
         setIsSearching(false);
-        Alert.alert('Search Error', `Search failed: ${data.error || 'Unknown Error'}. Tap directly on the map if search is unavailable.`);
+        Alert.alert(
+          t('errors.searchErrorTitle'),
+          t('errors.searchFailed', {error: data.error || 'Unknown Error'}),
+        );
       }
     } catch (e) {
       console.log('Error parsing map message:', e);
@@ -204,10 +241,12 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
     setRadius(text);
     const radiusNum = Number(text);
     if (!isNaN(radiusNum) && radiusNum > 0 && webViewRef.current) {
-      webViewRef.current.postMessage(JSON.stringify({
-        type: 'UPDATE_RADIUS',
-        radius: radiusNum,
-      }));
+      webViewRef.current.postMessage(
+        JSON.stringify({
+          type: 'UPDATE_RADIUS',
+          radius: radiusNum,
+        }),
+      );
       webViewRef.current.injectJavaScript(`
         if (typeof currentRadius !== 'undefined') {
           currentRadius = ${radiusNum};
@@ -223,10 +262,12 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
   const handleShapeChange = (shape: 'circular' | 'square') => {
     setGeofenceType(shape);
     if (webViewRef.current) {
-      webViewRef.current.postMessage(JSON.stringify({
-        type: 'UPDATE_SHAPE',
-        shape: shape,
-      }));
+      webViewRef.current.postMessage(
+        JSON.stringify({
+          type: 'UPDATE_SHAPE',
+          shape: shape,
+        }),
+      );
       webViewRef.current.injectJavaScript(`
         if (typeof currentShape !== 'undefined') {
           currentShape = '${shape}';
@@ -244,15 +285,20 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
 
     // Validation
     if (!siteName.trim()) {
-      setError('Site Name is required (e.g. Meerut Highway Project)');
+      setError(t('errors.siteNameRequired'));
       return;
     }
-    if (!latitude || !longitude || isNaN(Number(latitude)) || isNaN(Number(longitude))) {
-      setError('Please tap a location on the map or search to capture coordinates');
+    if (
+      !latitude ||
+      !longitude ||
+      isNaN(Number(latitude)) ||
+      isNaN(Number(longitude))
+    ) {
+      setError(t('errors.coordinatesRequired'));
       return;
     }
     if (!radius.trim() || isNaN(Number(radius)) || Number(radius) <= 0) {
-      setError('Radius must be a positive number in meters');
+      setError(t('errors.radiusRequired'));
       return;
     }
 
@@ -279,7 +325,10 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
 
       const result = await insertSite(newSite);
       if (result.success) {
-        Alert.alert('Success', `Site "${newSite.siteName}" registered successfully.`);
+        Alert.alert(
+          t('common.success'),
+          t('admin.siteRegistered', {name: newSite.siteName}),
+        );
         // Reset form
         setSiteName('');
         setLatitude('');
@@ -288,9 +337,11 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
         setGeofenceType('circular');
         // Reset map webview graphics
         if (webViewRef.current) {
-          webViewRef.current.postMessage(JSON.stringify({
-            type: 'RESET_MAP',
-          }));
+          webViewRef.current.postMessage(
+            JSON.stringify({
+              type: 'RESET_MAP',
+            }),
+          );
           webViewRef.current.injectJavaScript(`
             if (typeof geofenceShape !== 'undefined' && geofenceShape) {
               map.removeLayer(geofenceShape);
@@ -305,12 +356,15 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
         }
         await loadSites();
       } else {
-        const errorMsg = (result.error as any)?.message || JSON.stringify(result.error) || 'Unknown Database Error';
-        setError(`Failed to save site in database: ${errorMsg}`);
+        const errorMsg =
+          (result.error as any)?.message ||
+          JSON.stringify(result.error) ||
+          'Unknown Database Error';
+        setError(t('errors.failedToSaveSite', {error: errorMsg}));
       }
     } catch (err: any) {
       console.error('Error adding site:', err);
-      setError(`Error saving site: ${err?.message || err}`);
+      setError(t('errors.errorSavingSite', {error: err?.message || err}));
     } finally {
       setIsSubmitting(false);
     }
@@ -318,33 +372,36 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
 
   const handleDeleteSite = (id: string, name: string) => {
     Alert.alert(
-      'Delete Site',
-      `Are you sure you want to delete ${name} (${id})?\n\nThis will remove the geofence boundary associated with this site.`,
+      t('admin.deleteSiteTitle'),
+      t('admin.deleteSiteConfirm', {name, id}),
       [
-        { text: 'Cancel', style: 'cancel' },
+        {text: t('common.cancel'), style: 'cancel'},
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               const result = await deleteSite(id);
               if (result.success) {
-                Alert.alert('Deleted', `${name} deleted successfully.`);
+                Alert.alert(
+                  t('common.deleted'),
+                  t('admin.siteDeleted', {name}),
+                );
                 loadSites();
               } else {
-                Alert.alert('Error', 'Failed to delete site.');
+                Alert.alert(t('common.error'), t('errors.failedToDeleteSite'));
               }
             } catch (err) {
               console.error('Error deleting site:', err);
-              Alert.alert('Error', 'An error occurred while deleting the site.');
+              Alert.alert(t('common.error'), t('errors.errorDeletingSite'));
             }
           },
         },
-      ]
+      ],
     );
   };
 
-  const renderSiteCard = ({ item }: { item: any }) => (
+  const renderSiteCard = ({item}: {item: any}) => (
     <View style={styles.siteCard}>
       <View style={styles.siteInfo}>
         <Text style={styles.siteTitle}>{item.site_name}</Text>
@@ -352,14 +409,34 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
           <View style={styles.idBadge}>
             <Text style={styles.idBadgeText}>{item.site_id}</Text>
           </View>
-          <View style={[styles.idBadge, { backgroundColor: item.geofence_type === 'square' ? '#fff3e0' : '#e8f5e9' }]}>
-            <Text style={[styles.idBadgeText, { color: item.geofence_type === 'square' ? '#e65100' : '#2e7d32' }]}>
-              {item.geofence_type === 'square' ? 'Square' : 'Circular'}: {item.radius}m
+          <View
+            style={[
+              styles.idBadge,
+              {
+                backgroundColor:
+                  item.geofence_type === 'square' ? '#fff3e0' : '#e8f5e9',
+              },
+            ]}>
+            <Text
+              style={[
+                styles.idBadgeText,
+                {
+                  color:
+                    item.geofence_type === 'square' ? '#e65100' : '#2e7d32',
+                },
+              ]}>
+              {item.geofence_type === 'square'
+                ? t('admin.square')
+                : t('admin.circular')}
+              : {item.radius}m
             </Text>
           </View>
         </View>
         <Text style={styles.coordsText}>
-          📍 Lat: {item.latitude.toFixed(6)}, Lon: {item.longitude.toFixed(6)}
+          {t('admin.coordsLabel', {
+            lat: item.latitude.toFixed(6),
+            lon: item.longitude.toFixed(6),
+          })}
         </Text>
       </View>
       <TouchableOpacity
@@ -418,7 +495,7 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
     </head>
     <body>
       <div id="locate-btn" onclick="locateDevice()">🎯</div>
-      <div id="status-indicator">Tap map to select center point</div>
+      <div id="status-indicator">${t('admin.mapInstructionText')}</div>
       <div id="map"></div>
       <script>
         var defaultLat = 28.5702;
@@ -565,27 +642,35 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
 
   return (
     <SafeAreaView style={[styles.container, globalStyles.container]}>
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.headerSection}>
-          <Text style={styles.headerTitle}>Configure Geofence Sites</Text>
+          <Text style={styles.headerTitle}>
+            {t('admin.configureSitesTitle')}
+          </Text>
           <Text style={styles.headerSubtitle}>
-            Define project boundaries. Choose circular or square zones and search/tap the map.
+            {t('admin.configureSitesSubtitle')}
           </Text>
         </View>
 
         {/* Create Site Form */}
         <View style={styles.formContainer}>
-          <Text style={styles.sectionTitle}>Create New Boundary</Text>
+          <Text style={styles.sectionTitle}>
+            {t('admin.createNewBoundary')}
+          </Text>
 
           {/* Geofence Shape Selector */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Geofence Shape</Text>
+            <Text style={styles.label}>{t('admin.geofenceShape')}</Text>
             <View style={styles.shapeToggleContainer}>
               <TouchableOpacity
                 style={[
                   styles.shapeToggleButton,
-                  geofenceType === 'circular' && styles.shapeToggleActiveCircular,
+                  geofenceType === 'circular' &&
+                    styles.shapeToggleActiveCircular,
                 ]}
                 onPress={() => handleShapeChange('circular')}>
                 <Text
@@ -593,7 +678,7 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
                     styles.shapeToggleText,
                     geofenceType === 'circular' && styles.shapeToggleTextActive,
                   ]}>
-                  🔵 Circular Geofence
+                  {t('admin.circularGeofence')}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -607,7 +692,7 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
                     styles.shapeToggleText,
                     geofenceType === 'square' && styles.shapeToggleTextActive,
                   ]}>
-                  🟧 Square Geofence
+                  {t('admin.squareGeofence')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -615,11 +700,11 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
 
           {/* Native Location Search Input */}
           <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Search Highway/Landmark</Text>
+            <Text style={styles.label}>{t('admin.searchLocationLabel')}</Text>
             <View style={styles.searchBarRow}>
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search expressway, highway, toll, city (e.g. Dwarka)..."
+                placeholder={t('admin.searchLocationPlaceholder')}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 placeholderTextColor={COLORS.textTertiary}
@@ -632,7 +717,7 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
                 {isSearching ? (
                   <ActivityIndicator color={COLORS.white} size="small" />
                 ) : (
-                  <Text style={styles.searchBtnText}>Search</Text>
+                  <Text style={styles.searchBtnText}>{t('common.search')}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -642,12 +727,19 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
           {searchResults.length > 0 && (
             <View style={styles.suggestionsContainer}>
               <View style={styles.suggestionsHeader}>
-                <Text style={styles.suggestionsTitle}>Search Results ({searchResults.length})</Text>
+                <Text style={styles.suggestionsTitle}>
+                  {t('admin.searchResults')} ({searchResults.length})
+                </Text>
                 <TouchableOpacity onPress={() => setSearchResults([])}>
-                  <Text style={styles.closeSuggestionsText}>✕ Close</Text>
+                  <Text style={styles.closeSuggestionsText}>
+                    ✕ {t('common.close')}
+                  </Text>
                 </TouchableOpacity>
               </View>
-              <ScrollView style={styles.suggestionsScrollView} nestedScrollEnabled={true} keyboardShouldPersistTaps="handled">
+              <ScrollView
+                style={styles.suggestionsScrollView}
+                nestedScrollEnabled={true}
+                keyboardShouldPersistTaps="handled">
                 {searchResults.map((item, index) => (
                   <TouchableOpacity
                     key={index}
@@ -669,14 +761,14 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
           )}
 
           {/* Interactive OpenStreetMap WebView */}
-          <Text style={styles.label}>Center Coordinates & Pin Placement</Text>
+          <Text style={styles.label}>{t('admin.centerCoordsTitle')}</Text>
           <Text style={styles.mapInstructionText}>
-            Tap anywhere on the map below or search above to adjust the boundary center.
+            {t('admin.centerCoordsSubtitle')}
           </Text>
           <View style={styles.mapContainer}>
             <WebView
               ref={webViewRef}
-              source={{ html: leafletHtml }}
+              source={{html: leafletHtml}}
               onMessage={handleMapMessage}
               style={styles.mapWebView}
               javaScriptEnabled={true}
@@ -687,10 +779,10 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
           </View>
 
           <View style={styles.fieldContainer}>
-            <Text style={styles.label}>Site Name</Text>
+            <Text style={styles.label}>{t('admin.siteNameLabel')}</Text>
             <TextInput
               style={styles.input}
-              placeholder="e.g., Meerut Highway Project"
+              placeholder={t('admin.siteNamePlaceholder')}
               value={siteName}
               onChangeText={setSiteName}
               placeholderTextColor={COLORS.textTertiary}
@@ -698,9 +790,11 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
           </View>
 
           <View style={styles.fieldRow}>
-            <View style={[styles.fieldContainer, { flex: 1, marginRight: 8 }]}>
+            <View style={[styles.fieldContainer, {flex: 1, marginRight: 8}]}>
               <Text style={styles.label}>
-                {geofenceType === 'square' ? 'Half-Side Side (m)' : 'Radius (meters)'}
+                {geofenceType === 'square'
+                  ? t('admin.halfSideLabel')
+                  : t('admin.radiusLabel')}
               </Text>
               <TextInput
                 style={styles.input}
@@ -711,11 +805,13 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
                 placeholderTextColor={COLORS.textTertiary}
               />
             </View>
-            <View style={[styles.fieldContainer, { flex: 1 }]}>
-              <Text style={styles.label}>Coordinates (Tapped)</Text>
+            <View style={[styles.fieldContainer, {flex: 1}]}>
+              <Text style={styles.label}>{t('admin.coordsTappedLabel')}</Text>
               <View style={styles.coordDisplayBox}>
                 <Text style={styles.coordDisplayText} numberOfLines={1}>
-                  {latitude && longitude ? `${latitude}, ${longitude}` : 'Tap map to drop pin'}
+                  {latitude && longitude
+                    ? `${latitude}, ${longitude}`
+                    : t('admin.tapMapToDropPin')}
                 </Text>
               </View>
             </View>
@@ -730,20 +826,30 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
             {isSubmitting ? (
               <ActivityIndicator color={COLORS.white} />
             ) : (
-              <Text style={styles.addBtnText}>Save Geofence Site</Text>
+              <Text style={styles.addBtnText}>
+                {t('admin.saveGeofenceButton')}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
 
         {/* Existing Sites List */}
         <View style={styles.listContainer}>
-          <Text style={styles.sectionTitle}>Configured Highway Sites</Text>
+          <Text style={styles.sectionTitle}>
+            {t('admin.configuredSitesTitle')}
+          </Text>
 
           {isLoading ? (
-            <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 24 }} />
+            <ActivityIndicator
+              size="large"
+              color={COLORS.primary}
+              style={{marginTop: 24}}
+            />
           ) : sites.length === 0 ? (
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>No project sites configured.</Text>
+              <Text style={styles.emptyText}>
+                {t('admin.noSitesConfigured')}
+              </Text>
             </View>
           ) : (
             <FlatList
@@ -751,7 +857,7 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
               renderItem={renderSiteCard}
               keyExtractor={item => item.site_id}
               scrollEnabled={false}
-              ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
+              ItemSeparatorComponent={() => <View style={{height: 12}} />}
             />
           )}
         </View>
@@ -759,8 +865,10 @@ const ManageSitesScreen: React.FC<ManageSitesScreenProps> = ({ navigation, route
 
       {/* Footer */}
       <View style={styles.footerControls}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtnText}>Back to Dashboard</Text>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation.goBack()}>
+          <Text style={styles.backBtnText}>{t('admin.backToDashboard')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -832,7 +940,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e3f2fd',
     elevation: 1,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.1,
     shadowRadius: 1,
   },
@@ -840,7 +948,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff3e0',
     elevation: 1,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.1,
     shadowRadius: 1,
   },
@@ -926,7 +1034,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     elevation: 1,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: {width: 0, height: 1},
     shadowOpacity: 0.05,
     shadowRadius: 2,
   },
@@ -1068,7 +1176,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: SIZES.md,
     shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.15,
     shadowRadius: 4,
   },

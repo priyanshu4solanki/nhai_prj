@@ -10,14 +10,21 @@ import {
   ScrollView,
   ActivityIndicator,
   Image,
+  Modal,
+  FlatList,
 } from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 
 import {RootStackParamList} from '../types';
-import {COLORS, SIZES, STRINGS} from '../constants';
+import {COLORS, SIZES} from '../constants';
 import {globalStyles} from '../theme';
 import {validateEmployeeId} from '../utils';
-import {getEmployee, hasCompletedAttendanceToday} from '../services/databaseService';
+import {
+  getEmployee,
+  hasCompletedAttendanceToday,
+} from '../services/databaseService';
+import {useLanguage} from '../contexts/LanguageContext';
+import {useTranslation} from 'react-i18next';
 
 type LoginScreenProps = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
@@ -39,6 +46,9 @@ const DEPARTMENTS = [
 
 const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
   const [loginMode, setLoginMode] = useState<LoginMode>('employee');
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
+  const {changeLanguage, currentLanguage, supportedLanguages} = useLanguage();
+  const {t} = useTranslation();
 
   // Employee state
   const [employeeId, setEmployeeId] = useState('');
@@ -75,11 +85,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     setError('');
 
     if (!adminUsername.trim()) {
-      setError('Please enter admin username');
+      setError(t('errors.enterAdminUsername'));
       return;
     }
     if (!adminPassword.trim()) {
-      setError('Please enter admin password');
+      setError(t('errors.enterAdminPassword'));
       return;
     }
 
@@ -94,7 +104,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     ) {
       navigation.navigate('AdminDashboard', {adminUser: adminUsername.trim()});
     } else {
-      setError('Invalid admin credentials. Please try again.');
+      setError(t('errors.invalidCredentials'));
     }
 
     setIsLoading(false);
@@ -105,19 +115,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     setError('');
 
     if (!employeeId.trim()) {
-      setError(STRINGS.login.invalidEmployeeId);
+      setError(t('login.invalidEmployeeId'));
       return;
     }
 
     if (!validateEmployeeId(employeeId)) {
-      setError(
-        'Invalid Employee ID format (3-20 characters, letters/numbers and hyphen allowed)',
-      );
+      setError(t('errors.invalidEmployeeIdFormat'));
       return;
     }
 
     if (!selectedDepartment) {
-      setError(STRINGS.login.selectDepartment);
+      setError(t('login.selectDepartment'));
       return;
     }
 
@@ -126,9 +134,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
       const employee = await getEmployee(employeeId);
       if (!employee) {
-        setError(
-          `Employee ID "${employeeId}" is not registered. Contact your administrator to register.`,
-        );
+        setError(t('errors.employeeNotRegistered', {id: employeeId}));
         setIsLoading(false);
         return;
       }
@@ -136,7 +142,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
       // Check if employee has completed both check-in and check-out today
       const alreadyCompleted = await hasCompletedAttendanceToday(employeeId);
       if (alreadyCompleted) {
-        setError('Attendance already completed for today. You cannot log check-in/out multiple times.');
+        setError(
+          'Attendance already completed for today. You cannot log check-in/out multiple times.',
+        );
         setIsLoading(false);
         return;
       }
@@ -146,7 +154,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
         department: selectedDepartment,
       });
     } catch (err) {
-      setError('Failed to proceed to face authentication');
+      setError(t('errors.failedToStartSession'));
       console.error('Login error:', err);
     } finally {
       setIsLoading(false);
@@ -157,7 +165,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     setError('');
 
     if (!employeeId.trim()) {
-      setError(STRINGS.login.invalidEmployeeId);
+      setError(t('login.invalidEmployeeId'));
       return;
     }
 
@@ -169,7 +177,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
     }
 
     if (!selectedDepartment) {
-      setError(STRINGS.login.selectDepartment);
+      setError(t('login.selectDepartment'));
       return;
     }
 
@@ -186,7 +194,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
       }
 
       // Open their personal SyncScreen (My Attendance) directly
-      navigation.navigate('Sync', { employeeId: employeeId.trim().toUpperCase() });
+      navigation.navigate('Sync', {
+        employeeId: employeeId.trim().toUpperCase(),
+      });
     } catch (err) {
       setError('Failed to load attendance');
       console.error('View attendance error:', err);
@@ -197,7 +207,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
   return (
     <SafeAreaView style={[styles.container, globalStyles.container]}>
-
+      {/* Language Switcher Button */}
+      <TouchableOpacity
+        style={styles.languageButton}
+        onPress={() => setShowLanguageModal(true)}>
+        <Text style={styles.languageButtonText}>
+          🌐 {currentLanguage.toUpperCase()}
+        </Text>
+      </TouchableOpacity>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -209,9 +226,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
             style={styles.logoImage}
             resizeMode="contain"
           />
-          <Text style={styles.headerTitle}>{STRINGS.appSubtitle}</Text>
+          <Text style={styles.headerTitle}>{t('appSubtitle')}</Text>
           <Text style={styles.headerSubtitle}>
-            Datalake 3.0 • Offline Authentication
+            {t('login.datalakeSubtitle')}
           </Text>
         </View>
 
@@ -225,7 +242,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                 styles.tabText,
                 loginMode === 'employee' && styles.tabTextActive,
               ]}>
-              Employee
+              {t('login.employeeTab')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -236,7 +253,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                 styles.tabText,
                 loginMode === 'admin' && styles.tabTextActive,
               ]}>
-              Admin
+              {t('login.adminTab')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -247,15 +264,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
             <>
               {/* ─── Employee Form ─── */}
               <View style={styles.fieldContainer}>
-                <Text style={styles.label}>
-                  {STRINGS.login.employeeIdLabel}
-                </Text>
+                <Text style={styles.label}>{t('login.employeeIdLabel')}</Text>
                 <TextInput
                   style={[
                     styles.input,
                     error && employeeId === '' ? styles.inputError : null,
                   ]}
-                  placeholder={STRINGS.login.employeeIdPlaceholder}
+                  placeholder={t('login.employeeIdPlaceholder')}
                   value={employeeId}
                   onChangeText={text => {
                     setEmployeeId(text.toUpperCase());
@@ -267,9 +282,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
               </View>
 
               <View style={styles.fieldContainer}>
-                <Text style={styles.label}>
-                  {STRINGS.login.departmentLabel}
-                </Text>
+                <Text style={styles.label}>{t('login.departmentLabel')}</Text>
                 <TouchableOpacity
                   style={[
                     styles.departmentButton,
@@ -283,9 +296,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                       !selectedDepartment && {color: COLORS.textTertiary},
                     ]}>
                     {selectedDepartment
-                      ? DEPARTMENTS.find(d => d.value === selectedDepartment)
-                          ?.label
-                      : STRINGS.login.selectDepartmentPlaceholder}
+                      ? t(`departments.${selectedDepartment}`)
+                      : t('login.selectDepartmentPlaceholder')}
                   </Text>
                 </TouchableOpacity>
 
@@ -310,7 +322,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                             selectedDepartment === dept.value &&
                               styles.departmentOptionTextSelected,
                           ]}>
-                          {dept.label}
+                          {t(`departments.${dept.value}`)}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -322,10 +334,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
             <>
               {/* ─── Admin Form ─── */}
               <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Admin Username</Text>
+                <Text style={styles.label}>
+                  {t('login.adminUsernameLabel')}
+                </Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter admin username"
+                  placeholder={t('login.adminUsernamePlaceholder')}
                   value={adminUsername}
                   onChangeText={text => {
                     setAdminUsername(text);
@@ -338,10 +352,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
               </View>
 
               <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Admin Password</Text>
+                <Text style={styles.label}>
+                  {t('login.adminPasswordLabel')}
+                </Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter admin password"
+                  placeholder={t('login.adminPasswordPlaceholder')}
                   value={adminPassword}
                   onChangeText={text => {
                     setAdminPassword(text);
@@ -355,8 +371,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
 
               <View style={styles.adminHintBox}>
                 <Text style={styles.adminHintText}>
-                  Admin access is required to register new employees and manage
-                  facial embeddings.
+                  {t('login.adminAccessNotice')}
                 </Text>
               </View>
             </>
@@ -382,7 +397,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                 {isLoading ? (
                   <ActivityIndicator color={COLORS.white} />
                 ) : (
-                  <Text style={styles.loginButtonText}>Proceed to Mark Attendance</Text>
+                  <Text style={styles.loginButtonText}>
+                    {t('login.startButton')}
+                  </Text>
                 )}
               </TouchableOpacity>
 
@@ -393,7 +410,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
                 ]}
                 onPress={handleEmployeeViewAttendance}
                 disabled={isLoading}>
-                <Text style={styles.viewAttendanceButtonText}>View My Attendance</Text>
+                <Text style={styles.viewAttendanceButtonText}>
+                  {t('result.viewSyncQueue')}
+                </Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -408,7 +427,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
               {isLoading ? (
                 <ActivityIndicator color={COLORS.white} />
               ) : (
-                <Text style={styles.loginButtonText}>Admin Login</Text>
+                <Text style={styles.loginButtonText}>
+                  {t('login.adminLogin')}
+                </Text>
               )}
             </TouchableOpacity>
           )}
@@ -418,11 +439,60 @@ const LoginScreen: React.FC<LoginScreenProps> = ({navigation}) => {
         <View style={styles.infoContainer}>
           <Text style={styles.infoText}>
             {loginMode === 'employee'
-              ? 'Please ensure you have proper lighting and a clear view of your face for authentication.'
-              : 'Only authorized NHAI administrators can register new employees and manage the system.'}
+              ? t('login.employeeInfo')
+              : t('login.adminInfo')}
           </Text>
         </View>
       </ScrollView>
+
+      {/* Language Selection Modal */}
+      <Modal
+        visible={showLanguageModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLanguageModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t('common.language')}</Text>
+
+            <FlatList
+              data={supportedLanguages}
+              keyExtractor={item => item.code}
+              scrollEnabled={false}
+              renderItem={({item}) => (
+                <TouchableOpacity
+                  style={[
+                    styles.languageOption,
+                    currentLanguage === item.code &&
+                      styles.languageOptionSelected,
+                  ]}
+                  onPress={async () => {
+                    await changeLanguage(item.code);
+                    setShowLanguageModal(false);
+                  }}>
+                  <Text
+                    style={[
+                      styles.languageOptionText,
+                      currentLanguage === item.code &&
+                        styles.languageOptionTextSelected,
+                    ]}>
+                    {item.name}
+                  </Text>
+                  {currentLanguage === item.code && (
+                    <Text style={styles.checkmark}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            />
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={() => setShowLanguageModal(false)}>
+              <Text style={styles.closeButtonText}>{t('common.close')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -447,7 +517,7 @@ const styles = StyleSheet.create({
     zIndex: 100,
     elevation: 3,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.08,
     shadowRadius: 3,
   },
@@ -531,7 +601,7 @@ const styles = StyleSheet.create({
   input: {
     borderWidth: 1,
     borderColor: '#cbd5e1', // Slate-300 border
-    borderRadius: 10,       // Smoother rounded corners
+    borderRadius: 10, // Smoother rounded corners
     paddingHorizontal: SIZES.md,
     paddingVertical: SIZES.md,
     fontSize: SIZES.base,
@@ -564,7 +634,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     elevation: 4,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.08,
     shadowRadius: 5,
   },
@@ -625,7 +695,7 @@ const styles = StyleSheet.create({
     marginTop: SIZES.md,
     elevation: 3,
     shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: {width: 0, height: 2},
     shadowOpacity: 0.12,
     shadowRadius: 4,
   },
@@ -679,6 +749,88 @@ const styles = StyleSheet.create({
     fontSize: SIZES.base,
     fontWeight: '700',
     textDecorationLine: 'underline',
+  },
+  languageButton: {
+    alignSelf: 'flex-end',
+    marginRight: SIZES.lg,
+    marginTop: SIZES.md,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SIZES.sm,
+    paddingHorizontal: SIZES.md,
+    borderRadius: SIZES.md,
+    elevation: 2,
+    shadowColor: '#0f172a',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  languageButtonText: {
+    color: COLORS.white,
+    fontSize: SIZES.sm,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: SIZES.lg,
+    padding: SIZES.lg,
+    width: '80%',
+    maxWidth: 320,
+    elevation: 5,
+    shadowColor: '#0f172a',
+    shadowOffset: {width: 0, height: 2},
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  modalTitle: {
+    fontSize: SIZES.lg,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SIZES.lg,
+    textAlign: 'center',
+  },
+  languageOption: {
+    paddingVertical: SIZES.md,
+    paddingHorizontal: SIZES.md,
+    marginVertical: SIZES.sm,
+    borderRadius: SIZES.md,
+    backgroundColor: COLORS.gray100,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  languageOptionSelected: {
+    backgroundColor: COLORS.primary,
+  },
+  languageOptionText: {
+    fontSize: SIZES.base,
+    color: COLORS.text,
+  },
+  languageOptionTextSelected: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+  },
+  checkmark: {
+    color: COLORS.white,
+    fontSize: SIZES.lg,
+    fontWeight: 'bold',
+  },
+  closeButton: {
+    marginTop: SIZES.lg,
+    paddingVertical: SIZES.md,
+    backgroundColor: COLORS.gray100,
+    borderRadius: SIZES.md,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: COLORS.primary,
+    fontSize: SIZES.base,
+    fontWeight: '600',
   },
 });
 

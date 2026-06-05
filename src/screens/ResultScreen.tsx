@@ -8,9 +8,10 @@ import {
   ScrollView,
 } from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {useTranslation} from 'react-i18next';
 
 import {RootStackParamList} from '../types';
-import {COLORS, SIZES, STRINGS} from '../constants';
+import {COLORS, SIZES} from '../constants';
 import {globalStyles} from '../theme';
 import {getEmployee} from '../services/databaseService';
 import {attemptGeoAttendance} from '../utils/geofence';
@@ -29,6 +30,7 @@ type ResultScreenProps = NativeStackScreenProps<RootStackParamList, 'Result'>;
 
 const ResultScreen: React.FC<ResultScreenProps> = ({navigation, route}) => {
   const {employeeId, status, message} = route.params;
+  const {t} = useTranslation();
   const isSuccess = status === 'success';
 
   const [employeeName, setEmployeeName] = useState('Employee');
@@ -37,8 +39,11 @@ const ResultScreen: React.FC<ResultScreenProps> = ({navigation, route}) => {
   const [presentDurationMs, setPresentDurationMs] = useState<number | null>(
     null,
   );
-  const [siteName, setSiteName] = useState('Checking Location...');
-  const [coords, setCoords] = useState<{latitude: number; longitude: number} | null>(null);
+  const [siteName, setSiteName] = useState(t('result.checkingLocation'));
+  const [coords, setCoords] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   useEffect(() => {
     if (isSuccess) {
@@ -70,17 +75,19 @@ const ResultScreen: React.FC<ResultScreenProps> = ({navigation, route}) => {
         if (geoResult.action === 'check-out' && geoResult.durationMs) {
           setPresentDurationMs(geoResult.durationMs);
         }
-        
+
         // Automatically sync in background immediately if online
-        runBackgroundSync().catch(err => console.log('Auto-sync on attendance fail:', err));
+        runBackgroundSync().catch(err =>
+          console.log('Auto-sync on attendance fail:', err),
+        );
       } else {
         setIsSaved(false);
-        setSiteName('Outside Geofence');
+        setSiteName(t('result.outsideGeofence'));
         setCoords(geoResult.coords || null);
       }
     } catch (error) {
       console.error('Failed to log attendance offline:', error);
-      setSiteName('Error Checking Location');
+      setSiteName(t('result.locationError'));
     }
   };
 
@@ -99,12 +106,12 @@ const ResultScreen: React.FC<ResultScreenProps> = ({navigation, route}) => {
             <Text style={styles.indicatorGlyph}>{isSuccess ? '✓' : '✗'}</Text>
           </View>
           <Text style={styles.titleText}>
-            {isSuccess ? STRINGS.result.success : STRINGS.result.failure}
+            {isSuccess ? t('result.success') : t('result.failure')}
           </Text>
           <Text style={styles.subtitleText}>
             {isSuccess
-              ? 'Attendance verified entirely offline via edge AI.'
-              : 'Facial identification could not be confirmed.'}
+              ? t('result.offlineVerificationText')
+              : t('result.verificationFailedText')}
           </Text>
         </View>
 
@@ -114,42 +121,57 @@ const ResultScreen: React.FC<ResultScreenProps> = ({navigation, route}) => {
             {/* Slip Header */}
             <View style={styles.slipHeader}>
               <Text style={styles.slipHeaderTitle}>
-                NATIONAL HIGHWAYS AUTHORITY OF INDIA
+                {t('appTitle').toUpperCase()}
               </Text>
               <Text style={styles.slipHeaderSubtitle}>
-                OFFLINE ATTENDANCE SLIP
+                {t('result.offlineSlipTitle')}
               </Text>
             </View>
 
             {/* Slip Content */}
             <View style={styles.slipBody}>
               <View style={styles.slipRow}>
-                <Text style={styles.slipLabel}>Employee Name</Text>
+                <Text style={styles.slipLabel}>
+                  {t('result.employeeNameLabel')}
+                </Text>
                 <Text style={styles.slipValue}>{employeeName}</Text>
               </View>
 
               <View style={styles.slipRow}>
-                <Text style={styles.slipLabel}>Employee ID</Text>
+                <Text style={styles.slipLabel}>
+                  {t('login.employeeIdLabel')}
+                </Text>
                 <Text style={styles.slipValue}>{employeeId}</Text>
               </View>
 
               <View style={styles.slipRow}>
-                <Text style={styles.slipLabel}>Timestamp</Text>
+                <Text style={styles.slipLabel}>
+                  {t('result.timestampLabel')}
+                </Text>
                 <Text style={styles.slipValue}>
                   {formatTimestamp(timestamp)}
                 </Text>
               </View>
 
               <View style={styles.slipRow}>
-                <Text style={styles.slipLabel}>Verification Location</Text>
+                <Text style={styles.slipLabel}>
+                  {t('result.verificationLocationLabel')}
+                </Text>
                 <Text style={styles.slipValue} numberOfLines={2}>
-                  {siteName} {coords ? `(Lat: ${coords.latitude.toFixed(4)}, Lon: ${coords.longitude.toFixed(4)})` : ''}
+                  {siteName}{' '}
+                  {coords
+                    ? `(Lat: ${coords.latitude.toFixed(
+                        4,
+                      )}, Lon: ${coords.longitude.toFixed(4)})`
+                    : ''}
                 </Text>
               </View>
 
               {presentDurationMs !== null && (
                 <View style={styles.slipRow}>
-                  <Text style={styles.slipLabel}>Total Present Time</Text>
+                  <Text style={styles.slipLabel}>
+                    {t('result.totalPresentTimeLabel')}
+                  </Text>
                   <Text style={styles.slipValue}>
                     {formatDuration(presentDurationMs)}
                   </Text>
@@ -171,22 +193,22 @@ const ResultScreen: React.FC<ResultScreenProps> = ({navigation, route}) => {
                 <View style={styles.syncDot} />
                 <Text style={styles.syncBadgeText}>
                   {isSaved
-                    ? 'STORED OFFLINE (PENDING SYNC)'
-                    : 'STORING RECORD...'}
+                    ? t('result.storedOffline')
+                    : t('result.storingRecord')}
                 </Text>
               </View>
             </View>
           </View>
         ) : (
           <View style={styles.errorCard}>
-            <Text style={styles.errorTitle}>Verification Error</Text>
+            <Text style={styles.errorTitle}>
+              {t('result.verificationErrorTitle')}
+            </Text>
             <Text style={styles.errorText}>
-              {message ||
-                'The facial landmarks do not match credentials recorded for this ID.'}
+              {message || t('result.verificationErrorText')}
             </Text>
             <Text style={styles.errorAdvice}>
-              Please ensure proper lighting, align your face within the oval
-              guides, and blink slowly when prompted.
+              {t('result.verificationAdvice')}
             </Text>
           </View>
         )}
@@ -198,23 +220,23 @@ const ResultScreen: React.FC<ResultScreenProps> = ({navigation, route}) => {
           <>
             <TouchableOpacity
               style={styles.syncBtn}
-              onPress={() => navigation.navigate('Sync', { employeeId })}>
-              <Text style={styles.syncBtnText}>View My Attendance</Text>
+              onPress={() => navigation.navigate('Sync', {employeeId})}>
+              <Text style={styles.syncBtnText}>
+                {t('result.viewSyncQueue')}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.homeBtn}
               onPress={() => navigation.navigate('Login')}>
-              <Text style={styles.homeBtnText}>Back to Home</Text>
+              <Text style={styles.homeBtnText}>{t('result.backToHome')}</Text>
             </TouchableOpacity>
           </>
         ) : (
           <TouchableOpacity
             style={styles.syncBtn}
             onPress={() => navigation.goBack()}>
-            <Text style={styles.syncBtnText}>
-              {STRINGS.faceAuth.retryButton}
-            </Text>
+            <Text style={styles.syncBtnText}>{t('faceAuth.retryButton')}</Text>
           </TouchableOpacity>
         )}
       </View>

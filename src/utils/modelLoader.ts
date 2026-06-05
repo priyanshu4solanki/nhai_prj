@@ -1,4 +1,4 @@
-import { ModelStatus } from '../types';
+import {ModelStatus} from '../types';
 
 // TensorFlow Lite Face Recognition Model
 let tfLiteModelLoaded = false;
@@ -12,7 +12,7 @@ export const loadTFLiteModel = async (): Promise<ModelStatus> => {
     // This will require react-native-tflite or similar package
     // For now, simulating the loading process
 
-    return new Promise<ModelStatus>((resolve) => {
+    return new Promise<ModelStatus>(resolve => {
       setTimeout(() => {
         tfLiteModelLoaded = true;
         resolve({
@@ -49,7 +49,7 @@ export const loadMediaPipeFaceDetector = async (): Promise<ModelStatus> => {
     // TODO: Implement actual MediaPipe Face Detector loading
     // This will require react-native-mediapipe or similar package
 
-    return new Promise<ModelStatus>((resolve) => {
+    return new Promise<ModelStatus>(resolve => {
       setTimeout(() => {
         mediaFaceDetectorLoaded = true;
         resolve({
@@ -59,7 +59,8 @@ export const loadMediaPipeFaceDetector = async (): Promise<ModelStatus> => {
       }, 1000); // Simulate detector loading time
     });
   } catch (error) {
-    mediaFaceDetectError = error instanceof Error ? error.message : 'Unknown error';
+    mediaFaceDetectError =
+      error instanceof Error ? error.message : 'Unknown error';
     return {
       loaded: false,
       error: mediaFaceDetectError,
@@ -99,7 +100,10 @@ export const initializeAllModels = async (): Promise<{
       totalTime: Date.now() - startTime,
     };
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : 'Unknown error during model initialization';
+    const errorMsg =
+      error instanceof Error
+        ? error.message
+        : 'Unknown error during model initialization';
     errors.push(errorMsg);
     return {
       success: false,
